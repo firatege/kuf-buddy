@@ -370,7 +370,10 @@ def test_jab_with_reply_plays_out_across_both_terminals(monkeypatch):
             "reply": {"emote": "rage", "line": "fake? at least i HAVE tests"},
             "last_word": {"emote": "laugh", "line": "one test. it asserts True."}}}}
     mcp(call)                                   # sent from term-a
-    t0 = state.load()["reactions"]["term-a"]["ts"]
+    t_call = state.load()["reactions"]["term-a"]["ts"]
+    assert "HAVE tests" not in cli.current_view(state.load(), "term-b", b_name, t_call + 30)[1]
+    cli.hook_stop({})                           # Claude finished writing its answer
+    t0 = state.load()["reactions"]["term-a"]["anchor"]
 
     def shown(owner, name, dt):
         return cli.current_view(state.load(), owner, name, t0 + dt)[1]
@@ -473,3 +476,10 @@ def test_reading_speed_is_configurable():
     assert banter.reply_delay(line) < before
     config.set_value("words_per_sec", "banana")
     assert banter.reply_delay(line) == before
+
+
+def test_exchange_falls_back_to_call_time_if_the_turn_never_ends():
+    reaction = {"ts": 100.0, "source": "claude", "line": "x", "reply": {"emote": "sus", "line": "y"}}
+    assert banter.exchange_start(reaction, 150.0) is None
+    assert banter.exchange_start(reaction, 100.0 + banter.ANCHOR_WAIT_S + 1) == 100.0
+    assert banter.exchange_start({**reaction, "source": "cli"}, 101.0) == 100.0

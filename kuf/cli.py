@@ -104,6 +104,8 @@ def hook_stop(payload: dict) -> None:
     owner = owner_id()
     events, reaction, turn_start = state.view(state.load(), owner)
     if reaction and reaction["ts"] >= turn_start and reaction.get("source") == "claude":
+        if reaction.get("reply"):
+            state.anchor_exchange(owner, reaction["ts"])   # start the back-and-forth now
         return
     turn_events = [e for e in events if e["ts"] >= turn_start]
     picked = turn_fallback(turn_events, edit_count(events))

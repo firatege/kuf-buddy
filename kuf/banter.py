@@ -13,7 +13,8 @@ BANTER_S = 45          # how long a neighbor's line is worth answering in the st
 WORDS_PER_S = 4.0      # comfortable reading speed; `kuf config words_per_sec <n>`
 REPLY_DELAY_MIN_S, REPLY_DELAY_MAX_S = 2.0, 6.0
 LAST_WORD_DELAY_MAX_S = 12.0
-EXCHANGE_S = 40        # how long each of those stays up
+EXCHANGE_S = 60        # how long each of those stays up
+ANCHOR_WAIT_S = 120    # give up waiting for the turn to end after this long
 CONTEXT_S = 900        # how old a neighbor's line can be and still be mentioned to Claude
 SNIPPET = 40
 RETORT_ODDS = 3        # answer 1 in N neighbor lines that weren't aimed at us
@@ -37,6 +38,19 @@ def reading_s(line: str) -> float:
     return 1.0 + len(line.split()) / _words_per_sec()
 
 
+def exchange_start(reaction: dict, now: float) -> float | None:
+    """When the exchange clock starts: the end of the turn that wrote it.
+
+    Claude calls kuf_react before writing its answer; starting the reply then means
+    it plays out while the user is still reading. None = the turn is still running.
+    """
+    if reaction.get("anchor"):
+        return reaction["anchor"]
+    if reaction.get("source") != "claude" or now - reaction["ts"] > ANCHOR_WAIT_S:
+        return reaction["ts"]
+    return None
+
+
 def reply_delay(reaction: dict) -> float:
     """The reply lands once the jab has had time to be read."""
     return min(max(reading_s(reaction["line"]), REPLY_DELAY_MIN_S), REPLY_DELAY_MAX_S)
@@ -57,8 +71,9 @@ def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, 
         reaction = buddy["reaction"]
         if not reaction or not reaction.get("reply") or not _aimed_at(reaction, my_name):
             continue
+        start = exchange_start(reaction, now)
         delay = reply_delay(reaction)
-        if delay <= now - reaction["ts"] < delay + EXCHANGE_S:
+        if start is not None and delay <= now - start < delay + EXCHANGE_S:
             return reaction["reply"]["emote"], reaction["reply"]["line"]
     return None
 
@@ -67,8 +82,9 @@ def last_word(reaction: dict | None, now: float) -> tuple[str, str] | None:
     """Our own closing line after the target had its say."""
     if not reaction or not reaction.get("last_word"):
         return None
+    start = exchange_start(reaction, now)
     delay = last_word_delay(reaction)
-    if delay <= now - reaction["ts"] < delay + EXCHANGE_S:
+    if start is not None and delay <= now - start < delay + EXCHANGE_S:
         return reaction["last_word"]["emote"], reaction["last_word"]["line"]
     return None
 

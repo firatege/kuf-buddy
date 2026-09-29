@@ -90,6 +90,20 @@ def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
     return update(lambda s: {**s, "reactions": {**s["reactions"], owner: reaction}})
 
 
+def anchor_exchange(owner: str, reaction_ts: float) -> dict:
+    """Mark when the turn that wrote this reaction finished, so the written reply and
+    last word play out after the user has read Claude's answer, not while it's typing."""
+    now = time.time()
+
+    def change(s: dict) -> dict:
+        reaction = s["reactions"].get(owner)
+        if not reaction or reaction["ts"] != reaction_ts:
+            return s
+        return {**s, "reactions": {**s["reactions"], owner: {**reaction, "anchor": now}}}
+
+    return update(change)
+
+
 def start_turn(owner: str) -> dict:
     return update(lambda s: {**s, "turns": {**s["turns"], owner: time.time()}})
 
