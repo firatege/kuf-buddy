@@ -29,7 +29,7 @@ def state_file() -> Path:
 
 
 def empty_state() -> dict:
-    return {"events": [], "reactions": {}, "turns": {}, "buddies": {}}
+    return {"events": [], "reactions": {}, "turns": {}, "buddies": {}, "gossip": None}
 
 
 def load() -> dict:
@@ -64,6 +64,7 @@ def _prune(s: dict, now: float) -> dict:
         "reactions": {o: r for o, r in s["reactions"].items() if keep(o, r["ts"])},
         "turns": {o: ts for o, ts in s["turns"].items() if keep(o, ts)},
         "buddies": {o: b for o, b in s["buddies"].items() if is_alive(o)},
+        "gossip": s.get("gossip"),
     }
 
 
@@ -110,7 +111,9 @@ def register(owner: str) -> str:
         buddy = {"name": assign(owner, taken), "since": time.time()}
         return {**s, "buddies": {**s["buddies"], owner: buddy}}
 
-    return update(change)["buddies"][owner]["name"]
+    buddy = update(change)["buddies"].get(owner)
+    # A process that died meanwhile gets pruned; still answer with a sensible name.
+    return buddy["name"] if buddy else assign(owner, set())
 
 
 def neighbors(s: dict, owner: str) -> dict[str, dict]:

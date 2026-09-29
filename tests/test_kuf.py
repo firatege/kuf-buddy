@@ -245,6 +245,8 @@ def test_direction_from_niri_layout(theirs, expected):
 
 def test_neighbor_line_gets_an_instant_retort(monkeypatch):
     monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the right (api)" for o in others})
+    monkeypatch.setattr(banter, "RETORT_ODDS", 1)
+    monkeypatch.setattr(cli, "gossip_line", lambda *a: None)
     b_name = state.register("term-b")
     a_name = state.register("term-a")
     state.set_reaction("term-b", "flex", "my tests are green, loser", source="claude")
@@ -272,3 +274,75 @@ def test_prompt_hook_emits_additional_context():
     out = run_bin("hook", "prompt", stdin="{}").stdout
     ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
     assert "[kuf-buddy]" in ctx
+
+
+def test_unaddressed_neighbor_lines_are_only_answered_sometimes():
+    lines = [{"ts": 1000 + i / 1000, "line": "x", "to": ""} for i in range(300)]
+    answered = sum(banter.should_retort("Leş", r) for r in lines)
+    assert 0 < answered < 300
+    assert banter.should_retort("Leş", {"ts": 1.0, "line": "x", "to": "leş"})
+
+
+# ── gossip ─────────────────────────────────────────────────────────────────────
+
+from kuf import config, facts, gossip  # noqa: E402
+
+
+@pytest.fixture
+def two_goblins(monkeypatch):
+    monkeypatch.setattr(facts, "collect", lambda: {"temp": 91, "hour": 14, "song": "Gece"})
+    state.register("term-a")
+    state.register("term-b")
+    return state.load()
+
+
+def conversation(s, user="ege"):
+    """Every line spoken in one gossip slot, in order, with the speaker."""
+    start = 100 * gossip.GOSSIP_EVERY + gossip.START_OFFSET
+    said = []
+    for i in range(6):
+        t = start + i * gossip.LINE_S + 1
+        for who in ("term-a", "term-b"):
+            hit = gossip.current_line(state.load(), who, user, t)
+            if hit:
+                said.append((who, hit[1]))
+    return said
+
+
+def test_gossip_alternates_between_two_goblins_and_uses_facts(two_goblins):
+    said = conversation(two_goblins)
+    assert len(said) >= 2
+    assert {who for who, _ in said} == {"term-a", "term-b"}
+    assert all(said[i][0] != said[i + 1][0] for i in range(len(said) - 1))
+    assert not any("{" in line for _, line in said)
+
+
+def test_gossip_is_quiet_outside_the_window_and_with_one_goblin(two_goblins):
+    before = 100 * gossip.GOSSIP_EVERY + gossip.START_OFFSET - 5
+    assert gossip.current_line(state.load(), "term-a", "ege", before) is None
+    alone = {**state.load(), "buddies": {"term-a": {"name": "Küf", "since": 0}}}
+    assert gossip.current_line(alone, "term-a", "ege", before + 10) is None
+
+
+def test_every_script_formats_with_full_facts():
+    full = {"battery": 10, "charging": False, "temp": 90, "song": "s", "apps": ["steam", "discord"],
+            "hour": 3, "weekday": "Sunday", "uptime": "3 days", "ram": 80,
+            "a_proj": "x", "b_proj": "y", "last_file": "main.rs", "user": "ege", "a": "Küf", "b": "Pas"}
+    for _, lines in gossip.SCRIPTS:
+        for _, emote, template in lines:
+            assert emote in EMOTES
+            template.format(**full)
+
+
+def test_facts_collect_never_raises():
+    assert isinstance(facts.collect(), dict)
+
+
+def test_goblins_call_the_user_by_configured_name():
+    config.set_value("name", "ege")
+    assert config.user_name() == "ege"
+    assert "{user}" not in "".join(events.canned("idle", None, 0, str(i)) for i in range(20))
+
+
+def test_register_survives_a_dead_process():
+    assert state.register("999999998") in buddies.VARIANTS

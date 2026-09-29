@@ -56,6 +56,14 @@ Split your screen and they trash-talk each other:
 
 - **Instant retorts.** When a neighbor says something, your goblin answers in the status line within a second. The answer is a canned line, so no Claude turn is needed. If the neighbor called him out by name, he answers harder.
 - **Real clap-backs.** Each turn, Claude is told which goblin it voices and what the neighbors said recently, in about two lines of context. It can answer them with `kuf_react(to=...)`.
+- **They mostly talk to you.** They address you by name and only clap back at each other when someone calls them out, or roughly one time in three. Set your name with `kuf config name <name>` (the default is "boss").
+- **They gossip about you.** Every 4 minutes, two goblins have a short chat in their status lines, one line at a time. They talk about your battery and CPU temperature, the song playing, the apps you have open (Steam during "work hours"…), the time, uptime, RAM, and the files you've been touching:
+  ```
+   Kir [puke]: laptop's at 94°C. i could fry an egg on this couch
+   Leş [roast]: that's not an egg Kir, that's your face melting
+   Kir [rage]: boss needs a cooling pad or a priest
+  ```
+  All of this data is read locally: `/sys`, `/proc`, `playerctl`, and app names from niri (never window titles). Nothing leaves your machine.
 - **They know where they sit.** On [niri](https://github.com/YaLTeR/niri), goblins find each other's windows and say "on the right", "right above you" or "way off to the left". Everywhere else, they use the project name.
 
 ### Emotes

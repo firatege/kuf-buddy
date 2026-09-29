@@ -8,7 +8,9 @@ import time
 from pathlib import Path
 
 from . import state
-from .banter import context_for_claude, fresh_neighbor, retort
+from .banter import context_for_claude, fresh_neighbor, retort, should_retort
+from .config import set_value, user_name
+from .gossip import current_line as gossip_line
 from .emotes import EMOTES, IDLE_BY_MOOD
 from .events import TEST_CMD, canned, classify, edit_count, mood, pick, turn_fallback
 from .owner import owner_id
@@ -43,8 +45,11 @@ def current_view(s: dict, owner: str, name: str, now: float) -> tuple[str, str, 
         return emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling
     if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
         return reaction["emote"], reaction["line"], None
+    chat = gossip_line(s, owner, user_name(), now)
+    if chat:
+        return (*chat, None)
     hit = fresh_neighbor(s, owner, reaction["ts"] if reaction else 0.0, now)
-    if hit:
+    if hit and should_retort(name, hit[2]):
         return (*retort(name, hit[0], hit[1], hit[2], owner), None)
     if age < REACTION_TTL_S and reaction["emote"] in EMOTES:
         return reaction["emote"], reaction["line"], None
@@ -179,7 +184,8 @@ USAGE = """usage: kuf <command>
   hook post|fail|prompt|stop
   mcp                    run the MCP server on stdio
   preview [emote|--all]  show emotes in your terminal
-  say <emote> <line...>  make Küf say something right now
+  say <emote> <line...>  make your goblin say something right now
+  config name <name>     what the goblins call you (default: boss)
   install-statusline     put Küf in ~/.claude/settings.json (backs it up first)
   uninstall-statusline"""
 
@@ -202,6 +208,8 @@ def main(argv: list[str] | None = None) -> int:
     elif command == "say" and len(rest) >= 2 and rest[0] in EMOTES:
         state.register(owner_id())
         state.set_reaction(owner_id(), rest[0], " ".join(rest[1:]), source="cli")
+    elif command == "config" and len(rest) == 2:
+        print(json.dumps(set_value(rest[0], rest[1]), ensure_ascii=False))
     elif command == "install-statusline":
         cmd_install_statusline()
     elif command == "uninstall-statusline":

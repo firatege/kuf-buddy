@@ -6,6 +6,8 @@ import zlib
 from datetime import datetime
 from pathlib import Path
 
+from .config import user_name
+
 GRUMPY_WINDOW_S = 180
 FURIOUS_WINDOW_S = 420
 RAMPAGE_EDITS = 12
@@ -19,6 +21,10 @@ TEST_CMD = re.compile(r"\b(pytest|cargo test|npm (run )?test|pnpm test|bun test|
 
 LINES = {
     "idle": [
+        "yo {user}, drink some water. you look like me.",
+        "{user}, commit your shit before the laptop melts.",
+        "you good {user}? blink twice if claude is holding you hostage.",
+        "{user} if you refactor one more thing i'm moving out.",
         "*scratches belly* nobody touched shit. perfect.",
         "found a chip under the cushion. it's mine now, fuck off.",
         "don't refactor. just lie down. like me.",
@@ -53,7 +59,7 @@ LINES = {
     ],
     "win": [
         "tests green?? who are you and what did you do with my boy.",
-        "ok ok it passed. don't get cocky.",
+        "ok ok it passed. don't get cocky, {user}.",
         "look at that, it works. i'm tearing up. it's the mold.",
     ],
     "retort": [
@@ -89,7 +95,8 @@ def pick(options: list, seed: str):
 
 def _fields(event: dict | None, n: int) -> dict:
     event = event or {}
-    return {"file": Path(event.get("file", "")).name or "that file",
+    return {"user": user_name(),
+            "file": Path(event.get("file", "")).name or "that file",
             "cmd": (event.get("cmd") or "that").split()[0] if event.get("cmd") else "that",
             "n": n, "hour": f"{datetime.now().hour:02d}"}
 
