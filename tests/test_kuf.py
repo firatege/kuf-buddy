@@ -19,6 +19,7 @@ ANSI = re.compile(r"\033\[[0-9;]*m")
 @pytest.fixture(autouse=True)
 def kuf_home(tmp_path, monkeypatch):
     monkeypatch.setenv("KUF_HOME", str(tmp_path / "kuf"))
+    monkeypatch.delenv("NIRI_SOCKET", raising=False)   # never talk to the real compositor
     use_owner(monkeypatch, "term-a")
     return tmp_path
 
@@ -416,3 +417,38 @@ def test_session_start_registers_and_greets_the_user():
 def test_session_start_after_compact_stays_quiet():
     cli.hook_start({"source": "compact"})
     assert "term-a" not in state.load()["reactions"]
+
+
+# ── who's on screen ────────────────────────────────────────────────────────────
+
+def niri_win(wid, ws, col, width, row=1):
+    return {"id": wid, "workspace_id": ws, "pid": wid * 10,
+            "layout": {"pos_in_scrolling_layout": [col, row], "tile_size": [width, 1000.0]}}
+
+
+def test_visible_windows_grow_from_the_active_column_until_the_monitor_is_full():
+    windows = [niri_win(1, 41, 3, 916), niri_win(2, 41, 4, 700), niri_win(3, 41, 5, 954),
+               niri_win(4, 41, 6, 954), niri_win(5, 99, 1, 900)]
+    workspaces = [{"id": 41, "is_active": True, "output": "HDMI", "active_window_id": 4},
+                  {"id": 99, "is_active": False, "output": "HDMI", "active_window_id": 5}]
+    outputs = {"HDMI": {"logical": {"width": 1920}}}
+    assert screen.visible_window_ids(windows, workspaces, outputs) == {3, 4}
+
+
+def test_gossip_prefers_the_two_goblins_on_screen():
+    owners = ["a", "b", "c"]
+    for slot in range(50):
+        assert sorted(gossip.choose_pair(slot, owners, {"b", "c"})) == ["b", "c"]
+    pairs = {tuple(sorted(gossip.choose_pair(slot, owners, None))) for slot in range(50)}
+    assert len(pairs) > 1                     # can't tell who's visible: anyone may talk
+
+
+def test_off_screen_neighbors_get_no_canned_retort_unless_they_call_you_out(monkeypatch):
+    monkeypatch.setattr(banter, "visible_owners", lambda owners: {"term-a"})
+    me = state.register("term-a")
+    state.register("term-b")
+    state.set_reaction("term-b", "roast", "lol", source="claude")
+    now = time.time()
+    assert banter.fresh_neighbor(state.load(), "term-a", 0, now, me) is None
+    state.set_reaction("term-b", "roast", "lol", source="claude", to=me)
+    assert banter.fresh_neighbor(state.load(), "term-a", 0, time.time(), me) is not None

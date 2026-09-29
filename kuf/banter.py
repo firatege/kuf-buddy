@@ -7,7 +7,7 @@ from .buddies import VARIANTS
 from .config import user_name
 from .events import LINES, pick
 from .retorts import lines_for
-from .screen import describe_neighbors
+from .screen import describe_neighbors, visible_owners
 
 BANTER_S = 45          # how long a neighbor's line is worth answering in the status line
 REPLY_DELAY_S = 6      # target shows the written reply this long after the jab
@@ -52,7 +52,19 @@ def last_word(reaction: dict | None, now: float) -> tuple[str, str] | None:
 
 def fresh_neighbor(s: dict, owner: str, since: float, now: float, my_name: str = "",
                    window: float = BANTER_S) -> tuple[str, dict, dict] | None:
-    """Newest neighbor reaction after `since` and within `window`: (owner, buddy, reaction)."""
+    """Newest neighbor reaction after `since` and within `window`: (owner, buddy, reaction).
+
+    Neighbors that are off screen are ignored unless they called us out by name.
+    """
+    hit = _newest(s, owner, since, now, my_name, window)
+    if hit is None or _aimed_at(hit[2], my_name):
+        return hit
+    on_screen = visible_owners([owner, hit[0]])
+    return hit if on_screen is None or hit[0] in on_screen else None
+
+
+def _newest(s: dict, owner: str, since: float, now: float, my_name: str,
+            window: float) -> tuple[str, dict, dict] | None:
     best = None
     for other, buddy in state.neighbors(s, owner).items():
         reaction = buddy["reaction"]
@@ -94,7 +106,8 @@ def context_for_claude(owner: str) -> str:
     me = VARIANTS[name]
     lines = [f"[kuf-buddy] This turn you voice {name} ('{me['meaning']}'): {me['trait']}. "
              f"Talk mostly to the user ({user_name()}). When you jab a neighbor (to=<name>), also "
-             f"write their `reply` in THEIR voice and optionally your `last_word`."]
+             f"write their `reply` in THEIR voice and optionally your `last_word`. Prefer "
+             f"neighbors that are on screen."]
     others = state.neighbors(s, owner)
     if not others:
         return lines[0]

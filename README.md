@@ -70,6 +70,7 @@ Split your screen and they trash-talk each other:
    Kir [rage]: boss needs a cooling pad or a priest
   ```
   All of this data is read locally: `/sys`, `/proc`, `playerctl`, and app names from niri (never window titles). Nothing leaves your machine.
+- **They stick to what you can see.** On niri, gossip pairs are picked from the terminals that are actually on screen, and canned retorts ignore goblins that are scrolled out of view unless those goblins called them out by name. Claude is told which neighbors are off screen too. niri doesn't report the scroll position, so "on screen" is estimated: start from the focused column and add neighboring columns while they still fit in the monitor's width.
 - **They know where they sit.** On [niri](https://github.com/YaLTeR/niri), goblins find each other's windows and say "on the right", "right above you" or "way off to the left". Everywhere else, they use the project name.
 
 ### Emotes

@@ -9,7 +9,7 @@ import time
 import zlib
 from pathlib import Path
 
-from . import facts, state
+from . import facts, screen, state
 
 GOSSIP_EVERY = 240
 START_OFFSET = 20
@@ -118,25 +118,38 @@ def _seed(*parts) -> int:
     return zlib.crc32("|".join(map(str, parts)).encode())
 
 
-def snapshot(slot: int, s: dict, pair: list[str]) -> dict:
-    """Facts for this slot, collected once and shared through state."""
+def choose_pair(slot: int, owners: list[str], visible: set[str] | None) -> list[str]:
+    """Two goblins for this slot, preferring the terminals the user can actually see."""
+    on_screen = sorted(o for o in owners if visible and o in visible)
+    pool = on_screen if len(on_screen) >= 2 else owners
+    first = _seed(slot, "a") % len(pool)
+    second = (first + 1 + _seed(slot, "b") % (len(pool) - 1)) % len(pool)
+    return [pool[first], pool[second]]
+
+
+def snapshot(slot: int, s: dict) -> dict:
+    """{pair, facts} for this slot, decided once and shared through state so every
+    terminal agrees even if the user scrolls mid-conversation."""
     cached = s.get("gossip") or {}
-    if cached.get("slot") == slot:
-        return cached["facts"]
-    fresh = {**facts.collect(), **_project_facts(s, pair)}
+    if cached.get("slot") == slot and cached.get("pair"):
+        return cached
+    owners = sorted(s["buddies"])
+    pair = choose_pair(slot, owners, screen.visible_owners(owners))
+    fresh = {"slot": slot, "pair": pair,
+             "facts": {**facts.collect(), **_project_facts(s, pair)}}
 
     def change(current: dict) -> dict:
-        if (current.get("gossip") or {}).get("slot") == slot:
+        existing = current.get("gossip") or {}
+        if existing.get("slot") == slot and existing.get("pair"):
             return current
-        return {**current, "gossip": {"slot": slot, "facts": fresh}}
+        return {**current, "gossip": fresh}
 
-    return state.update(change)["gossip"]["facts"]
+    return state.update(change)["gossip"]
 
 
 def _project_facts(s: dict, pair: list[str]) -> dict:
-    from .screen import project_of
     edited = [e for e in s["events"] if e.get("owner") in pair and e.get("file")]
-    extra = {"a_proj": project_of(pair[0]), "b_proj": project_of(pair[1])}
+    extra = {"a_proj": screen.project_of(pair[0]), "b_proj": screen.project_of(pair[1])}
     return {**extra, "last_file": Path(edited[-1]["file"]).name} if edited else extra
 
 
@@ -151,13 +164,12 @@ def current_line(s: dict, owner: str, user: str, now: float | None = None) -> tu
     if index < 0:
         return None
 
-    first = _seed(slot, "a") % len(owners)
-    second = (first + 1 + _seed(slot, "b") % (len(owners) - 1)) % len(owners)
-    pair = [owners[first], owners[second]]
-    if owner not in pair:
+    snap = snapshot(slot, s)
+    pair = snap["pair"]
+    if owner not in pair or any(p not in s["buddies"] for p in pair):
         return None
 
-    info = snapshot(slot, s, pair)
+    info = snap["facts"]
     eligible = [lines for cond, lines in SCRIPTS if cond(info)]
     script = eligible[_seed(slot, "script") % len(eligible)]
     if index >= len(script):
