@@ -346,3 +346,10 @@ def test_goblins_call_the_user_by_configured_name():
 
 def test_register_survives_a_dead_process():
     assert state.register("999999998") in buddies.VARIANTS
+
+
+def test_idle_goblins_dont_all_say_the_same_thing():
+    s = state.load()
+    now = 1_790_000_000.0
+    lines = {cli.current_view(s, f"term-{n}", n, now)[1] for n in buddies.VARIANTS}
+    assert len(lines) > 1

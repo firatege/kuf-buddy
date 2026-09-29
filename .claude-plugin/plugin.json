@@ -1,7 +1,7 @@
 {
   "name": "kuf-buddy",
   "description": "Küf: a filthy, foul-mouthed ASCII couch goblin that lives in your status line and roasts, praises and trash-talks your code.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": {
     "name": "Fırat Ege Bayram",
     "url": "https://github.com/firatege"

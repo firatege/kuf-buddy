@@ -9,7 +9,7 @@ from .buddies import VARIANTS
 from .emotes import EMOTES
 from .owner import owner_id
 
-SERVER_INFO = {"name": "kuf", "version": "0.3.0"}
+SERVER_INFO = {"name": "kuf", "version": "0.3.1"}
 DEFAULT_PROTOCOL = "2025-06-18"
 MAX_LINE = 120
 

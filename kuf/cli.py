@@ -5,6 +5,7 @@ import os
 import shutil
 import sys
 import time
+import zlib
 from pathlib import Path
 
 from . import state
@@ -17,6 +18,7 @@ from .owner import owner_id
 from .render import compose
 
 REACTION_TTL_S = 150
+IDLE_SWAP_S = 600
 JUST_SPOKE_S = 20   # his own fresh line beats answering the neighbors
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 BIN = Path(__file__).resolve().parent.parent / "bin" / "kuf"
@@ -53,7 +55,9 @@ def current_view(s: dict, owner: str, name: str, now: float) -> tuple[str, str, 
         return (*retort(name, hit[0], hit[1], hit[2], owner), None)
     if age < REACTION_TTL_S and reaction["emote"] in EMOTES:
         return reaction["emote"], reaction["line"], None
-    slot = str(int(now // 600))
+    # Seed with the goblin's name and stagger the switch so terminals don't chant in sync.
+    offset = zlib.crc32(name.encode()) % IDLE_SWAP_S
+    slot = f"{int((now + offset) // IDLE_SWAP_S)}:{name}"
     return pick(IDLE_BY_MOOD[feeling], slot), canned(kind, trigger, edits, slot), feeling
 
 
