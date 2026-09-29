@@ -1,0 +1,28 @@
+{
+  "name": "kuf-buddy",
+  "description": "Küf: a filthy, foul-mouthed ASCII couch goblin that lives in your status line and roasts, praises and trash-talks your code.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Fırat Ege Bayram",
+    "url": "https://github.com/firatege"
+  },
+  "homepage": "https://github.com/firatege/kuf-buddy",
+  "repository": "https://github.com/firatege/kuf-buddy",
+  "license": "MIT",
+  "keywords": [
+    "buddy",
+    "pet",
+    "statusline",
+    "ascii",
+    "fun"
+  ],
+  "mcpServers": {
+    "kuf": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/kuf",
+        "mcp"
+      ]
+    }
+  }
+}
