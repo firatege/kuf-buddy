@@ -252,11 +252,11 @@ def test_neighbor_line_gets_an_instant_retort(monkeypatch):
     a_name = state.register("term-a")
     state.set_reaction("term-b", "flex", "my tests are green, loser", source="claude")
 
-    emote, line, _ = cli.current_view(state.load(), "term-a", a_name, time.time())
+    emote, line, *_ = cli.current_view(state.load(), "term-a", a_name, time.time())
     assert b_name in line and emote in banter.RETORT_EMOTES
 
     state.set_reaction("term-b", "roast", "yo, your code sucks", source="claude", to=a_name)
-    emote, line, _ = cli.current_view(state.load(), "term-a", a_name, time.time())
+    emote, line, *_ = cli.current_view(state.load(), "term-a", a_name, time.time())
     assert emote in banter.COMEBACK_EMOTES
 
 
@@ -483,3 +483,36 @@ def test_exchange_falls_back_to_call_time_if_the_turn_never_ends():
     assert banter.exchange_start(reaction, 150.0) is None
     assert banter.exchange_start(reaction, 100.0 + banter.ANCHOR_WAIT_S + 1) == 100.0
     assert banter.exchange_start({**reaction, "source": "cli"}, 101.0) == 100.0
+
+
+# ── facing ─────────────────────────────────────────────────────────────────────
+
+def test_mirror_flips_direction_and_keeps_rows_aligned():
+    rows = ["(☞ﾟ∀ﾟ)☞", "▐▌/|▓▓▓|\\▐▌,,"]
+    flipped = render.mirror(rows)
+    assert flipped[0].strip() == "☜(ﾟ∀ﾟ☜)"
+    assert flipped[1] == ",,▐▌/|▓▓▓|\\▐▌"
+    assert len({render.width(r) for r in flipped}) == 1
+    assert render.mirror(render.mirror(["(•̀ᴗ•́)☝"]))[0].strip() == "(•̀ᴗ•́)☝"
+
+
+def test_goblin_faces_the_neighbor_he_talks_to_and_looks_ahead_otherwise(monkeypatch):
+    monkeypatch.setattr(cli, "gossip_line", lambda *a: None)
+    a_name, b_name = state.register("term-a"), state.register("term-b")
+    state.set_reaction("term-b", "roast", "hey", source="cli", to=a_name,
+                       reply={"emote": "rage", "line": "what"})
+    t = state.load()["reactions"]["term-b"]["ts"]
+    assert cli.current_view(state.load(), "term-a", a_name, t + 10).toward == "term-b"
+    assert cli.current_view(state.load(), "term-a", a_name, t + 500).toward is None
+
+
+def test_left_facing_layout_puts_bubble_first_with_tail_toward_him():
+    out = ANSI.sub("", render.compose("roast", "lmao", 0, facing="left")).splitlines()
+    face = next(row for row in out if "☜" in row)
+    assert face.index(">") < face.index("☜")
+
+
+@pytest.mark.parametrize("name", ["tea", "nap", "phone", "stretch", "game", "nosepick"])
+def test_idle_life_emotes_are_looping_animations(name):
+    assert len(EMOTES[name]["frames"]) >= 4
+    assert name in IDLE_BY_MOOD["comfy"]

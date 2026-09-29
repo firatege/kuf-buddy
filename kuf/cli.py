@@ -7,6 +7,7 @@ import sys
 import time
 import zlib
 from pathlib import Path
+from typing import NamedTuple
 
 from . import state
 from .banter import (context_for_claude, fresh_neighbor, incoming_reply, last_word, retort,
@@ -17,6 +18,7 @@ from .emotes import EMOTES, IDLE_BY_MOOD
 from .events import TEST_CMD, canned, classify, edit_count, mood, pick, turn_fallback
 from .owner import owner_id
 from .render import compose
+from .screen import side_of
 
 REACTION_TTL_S = 150
 IDLE_SWAP_S = 600
@@ -36,34 +38,49 @@ def read_payload() -> dict:
 
 # ── status line ────────────────────────────────────────────────────────────────
 
-def current_view(s: dict, owner: str, name: str, now: float) -> tuple[str, str, str | None]:
-    """Decide (emote, line, mood) to show right now in this terminal."""
+class View(NamedTuple):
+    emote: str
+    line: str
+    mood: str | None = None
+    toward: str | None = None   # owner of the neighbor he's talking to; None = look ahead
+
+
+def _owner_named(s: dict, name: str) -> str | None:
+    return next((o for o, b in s["buddies"].items() if b["name"].lower() == name.lower()), None)
+
+
+def current_view(s: dict, owner: str, name: str, now: float) -> View:
+    """Decide what to show right now in this terminal."""
     events, reaction, _ = state.view(s, owner)
     feeling, kind, trigger = mood(events, now)
     edits = edit_count(events)
     age = now - reaction["ts"] if reaction else float("inf")
+    target = _owner_named(s, reaction.get("to", "")) if reaction and reaction.get("to") else None
 
     if trigger and (not reaction or trigger["ts"] > reaction["ts"]):
         emote = pick(IDLE_BY_MOOD[feeling], str(trigger["ts"]))
-        return emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling
+        return View(emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling)
     # A written exchange runs on its own clock: the last word may cut our own line short.
-    exchange = last_word(reaction, now) or incoming_reply(s, owner, name, now)
-    if exchange:
-        return (*exchange, None)
+    closing = last_word(reaction, now)
+    if closing:
+        return View(*closing, toward=target)
+    reply = incoming_reply(s, owner, name, now)
+    if reply:
+        return View(reply[0], reply[1], toward=reply[2])
     if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
-        return reaction["emote"], reaction["line"], None
+        return View(reaction["emote"], reaction["line"], toward=target)
     chat = gossip_line(s, owner, user_name(), now)
     if chat:
-        return (*chat, None)
+        return View(chat[0], chat[1], toward=chat[2])
     hit = fresh_neighbor(s, owner, reaction["ts"] if reaction else 0.0, now, name)
     if hit and should_retort(name, hit[2]):
-        return (*retort(name, hit[0], hit[1], hit[2], owner), None)
+        return View(*retort(name, hit[0], hit[1], hit[2], owner), toward=hit[0])
     if age < REACTION_TTL_S and reaction["emote"] in EMOTES:
-        return reaction["emote"], reaction["line"], None
+        return View(reaction["emote"], reaction["line"], toward=target)
     # Seed with the goblin's name and stagger the switch so terminals don't chant in sync.
     offset = zlib.crc32(name.encode()) % IDLE_SWAP_S
     slot = f"{int((now + offset) // IDLE_SWAP_S)}:{name}"
-    return pick(IDLE_BY_MOOD[feeling], slot), canned(kind, trigger, edits, slot), feeling
+    return View(pick(IDLE_BY_MOOD[feeling], slot), canned(kind, trigger, edits, slot), feeling)
 
 
 def cmd_status() -> None:
@@ -71,8 +88,9 @@ def cmd_status() -> None:
     now = time.time()
     owner = owner_id()
     name = state.register(owner)
-    emote, line, feeling = current_view(state.load(), owner, name, now)
-    print(compose(emote, line, int(now), feeling, name=name))
+    view = current_view(state.load(), owner, name, now)
+    facing = side_of(owner, view.toward) if view.toward else "right"
+    print(compose(view.emote, view.line, int(now), view.mood, name=name, facing=facing or "right"))
 
 
 # ── hooks ──────────────────────────────────────────────────────────────────────

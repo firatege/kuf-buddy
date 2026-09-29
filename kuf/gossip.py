@@ -153,8 +153,9 @@ def _project_facts(s: dict, pair: list[str]) -> dict:
     return {**extra, "last_file": Path(edited[-1]["file"]).name} if edited else extra
 
 
-def current_line(s: dict, owner: str, user: str, now: float | None = None) -> tuple[str, str] | None:
-    """(emote, line) if `owner` is speaking in the gossip right now, else None."""
+def current_line(s: dict, owner: str, user: str,
+                 now: float | None = None) -> tuple[str, str, str] | None:
+    """(emote, line, partner owner) if `owner` is speaking in the gossip right now."""
     now = time.time() if now is None else now
     owners = sorted(s["buddies"])
     if len(owners) < 2 or owner not in owners:
@@ -180,6 +181,6 @@ def current_line(s: dict, owner: str, user: str, now: float | None = None) -> tu
     names = {o: b["name"] for o, b in s["buddies"].items()}
     fields = {**info, "user": user, "a": names[pair[0]], "b": names[pair[1]]}
     try:
-        return emote, template.format(**fields)
+        return emote, template.format(**fields), pair[1 - speaker]
     except (KeyError, IndexError, ValueError):
         return None

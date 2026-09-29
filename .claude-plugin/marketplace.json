@@ -10,7 +10,7 @@
       "name": "kuf-buddy",
       "source": "./",
       "description": "Küf: a filthy, foul-mouthed ASCII couch goblin that lives in your status line and roasts, praises and trash-talks your code.",
-      "version": "0.5.2",
+      "version": "0.6.0",
       "category": "fun",
       "license": "MIT"
     }

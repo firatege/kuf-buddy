@@ -132,3 +132,17 @@ def describe_neighbors(me: str, others: list[str]) -> dict[str, str]:
             label += ", off screen"
         labels[other] = label
     return labels
+
+
+def side_of(me: str, other: str) -> str | None:
+    """'left' or 'right': which way to turn to face `other`. None if we can't tell."""
+    windows = niri_windows()
+    mine, theirs = window_of(me, windows), window_of(other, windows)
+    if not mine or not theirs or mine.get("workspace_id") != theirs.get("workspace_id"):
+        return None
+    try:
+        gap = (theirs["layout"]["pos_in_scrolling_layout"][0]
+               - mine["layout"]["pos_in_scrolling_layout"][0])
+    except (KeyError, TypeError, IndexError):
+        return None
+    return None if gap == 0 else ("right" if gap > 0 else "left")

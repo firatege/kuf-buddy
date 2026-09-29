@@ -74,9 +74,24 @@ Split your screen and they trash-talk each other:
 - **They stick to what you can see.** On niri, gossip pairs are picked from the terminals that are actually on screen, and canned retorts ignore goblins that are scrolled out of view unless those goblins called them out by name. Claude is told which neighbors are off screen too. niri doesn't report the scroll position, so "on screen" is estimated: start from the focused column and add neighboring columns while they still fit in the monitor's width.
 - **They know where they sit.** On [niri](https://github.com/YaLTeR/niri), goblins find each other's windows and say "on the right", "right above you" or "way off to the left". Everywhere else, they use the project name.
 
+### Life on the couch
+
+He actually sits on a couch now, armrests and all. When nobody is talking to him, he looks straight ahead and lives his life in 4-frame loops, one frame per second:
+
+```
+    ~                      z
+   (-‿-) 旦    tea                    nap        beep          phone
+▐▌/|▓▓▓|ﾉ▐▌,,          ▐▌(-.-)▓▓▐▌,,      (°▽°)▣        (・_・)▯
+▐█▄▄▄▄▄▄▄█▌            ▐█▄▄▄▄▄▄▄█▌
+```
+
+The loops are sipping tea (the steam moves), napping stretched along the couch (the zZ rises), gaming, doomscrolling, yawning and stretching, and picking his nose.
+
+When he talks to a neighbor (written replies, last words, retorts or gossip), he turns to face that terminal. A goblin whose neighbor is on the left is mirrored, and his bubble moves to his mouth side.
+
 ### Emotes
 
-`chill` `sleep` `eat` `burp` `scratch` `laugh` `roast` `rage` `tableflip` `middle-finger` `facepalm` `flex` `hype` `cry` `dead` `sus` `think` `tip` `shrug` `love` `puke`
+`chill` `tea` `nap` `phone` `stretch` `game` `nosepick` `sleep` `eat` `burp` `scratch` `laugh` `roast` `rage` `tableflip` `middle-finger` `facepalm` `flex` `hype` `cry` `dead` `sus` `think` `tip` `shrug` `love` `puke`
 
 See them all:
 

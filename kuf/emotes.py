@@ -3,13 +3,22 @@
 Row order is always: effects/flies, face, body, couch.
 """
 
-COUCH = "▀█▀▀▀▀▀▀█▀"
+COUCH = "▐█▄▄▄▄▄▄▄█▌"      # seat; the armrests are added around the body row
 BODY = "/|▓▓▓|\\ ,,"
 SLOUCH = " |▓▓▓|~ ,,"
+ARM_L, ARM_R = "▐▌", "▐▌"
+BODY_CORE = 7                # body chars that sit between the armrests; the rest is floor junk
 
 
-def _emote(desc: str, frame_a: tuple, frame_b: tuple) -> dict:
-    return {"desc": desc, "frames": [list(frame_a), list(frame_b)]}
+def _on_couch(frame: tuple) -> list[str]:
+    """Sit a frame written as (effects, face, body+junk, seat) between the armrests."""
+    fx, face, body, seat = frame
+    core, junk = body[:BODY_CORE], body[BODY_CORE:].strip()[:2]
+    return ["  " + fx, "  " + face, f"{ARM_L}{core}{ARM_R}{junk}", seat]
+
+
+def _emote(desc: str, *frames: tuple) -> dict:
+    return {"desc": desc, "frames": [_on_couch(f) for f in frames]}
 
 
 EMOTES: dict[str, dict] = {
@@ -120,9 +129,56 @@ EMOTES: dict[str, dict] = {
     ),
 }
 
+# Idle life on the couch: longer loops, one frame per second.
+EMOTES.update({
+    "tea": _emote(
+        "sipping tea on the couch, pinky out",
+        ("  ~", " (-‿-) 旦", "/|▓▓▓|ﾉ ,,", COUCH),
+        (" ~  ~", " (-‿-)旦", "/|▓▓▓ﾉ| ,,", COUCH),
+        ("  ~", " (ˆ‿ˆ)旦", "/|▓▓▓ﾉ| ,,", COUCH),
+        (" ahh~", " (ˆ▿ˆ) 旦", "/|▓▓▓|ﾉ ,,", COUCH),
+    ),
+    "nap": _emote(
+        "stretched out along the couch, napping",
+        ("      z", "", "(-.-)▓▓ ,,", COUCH),
+        ("     zZ", "", "(-.-)▓▓ ,,", COUCH),
+        ("    zZz", "", "(-o-)▓▓ ,,", COUCH),
+        ("   Zzz ", "", "(-.-)▓▓ ,,", COUCH),
+    ),
+    "phone": _emote(
+        "doomscrolling on his phone",
+        ("  °", " (・_・)▯", "/|▓▓▓|ﾉ ,,", COUCH),
+        ("  ·", " (・_・ )▯", "/|▓▓▓|ﾉ ,,", COUCH),
+        ("  °", " (・‿・)▯", "/|▓▓▓|ﾉ ,,", COUCH),
+        ("  lol", " (≧▽≦)▯", "/|▓▓▓|ﾉ ,,", COUCH),
+    ),
+    "stretch": _emote(
+        "yawning and stretching",
+        ("  °", " (-‿-)", BODY, COUCH),
+        (" yaaawn", "\\(˘O˘)/", " |▓▓▓| ,,", COUCH),
+        ("  ~", "\\(˘o˘)/", " |▓▓▓| ,,", COUCH),
+        ("  ·", " (ˆ‿ˆ)", SLOUCH, COUCH),
+    ),
+    "game": _emote(
+        "playing a beat-up gameboy",
+        (" beep", " (°▽°)▣", "/|▓▓▓|ﾉ ,,", COUCH),
+        (" boop", " (°o°)▣", "/|▓▓▓|ﾉ ,,", COUCH),
+        (" beep", " (ò_ó)▣", "/|▓▓▓|ﾉ ,,", COUCH),
+        (" YES", " (≧▽≦)▣", "/|▓▓▓|ﾉ ,,", COUCH),
+    ),
+    "nosepick": _emote(
+        "picking his nose. he's a goblin",
+        ("  °", " (¬‿¬)", BODY, COUCH),
+        ("  ·", " (¬o¬)ﾉ", "/|▓▓▓|  ,,", COUCH),
+        ("  °", " (ˆoˆ)ﾉ•", "/|▓▓▓|  ,,", COUCH),
+        ("  ·  •", " (¬‿¬)", BODY, COUCH),
+    ),
+})
+
 IDLE_BY_MOOD = {
-    "comfy": ["chill", "eat", "scratch", "burp"],
-    "sleepy": ["sleep"],
+    "comfy": ["chill", "tea", "nap", "phone", "stretch", "game", "eat", "scratch",
+              "burp", "nosepick"],
+    "sleepy": ["sleep", "nap"],
     "grumpy": ["sus", "facepalm"],
     "furious": ["rage"],
 }

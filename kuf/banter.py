@@ -65,16 +65,16 @@ def _aimed_at(reaction: dict, name: str) -> bool:
     return reaction.get("to", "").lower() == name.lower()
 
 
-def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, str] | None:
-    """A reply some other terminal's Claude wrote for us to say back to them."""
-    for buddy in state.neighbors(s, owner).values():
+def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, str, str] | None:
+    """(emote, line, their owner): a reply another terminal's Claude wrote for us."""
+    for other, buddy in state.neighbors(s, owner).items():
         reaction = buddy["reaction"]
         if not reaction or not reaction.get("reply") or not _aimed_at(reaction, my_name):
             continue
         start = exchange_start(reaction, now)
         delay = reply_delay(reaction)
         if start is not None and delay <= now - start < delay + EXCHANGE_S:
-            return reaction["reply"]["emote"], reaction["reply"]["line"]
+            return reaction["reply"]["emote"], reaction["reply"]["line"], other
     return None
 
 

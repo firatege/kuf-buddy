@@ -35,9 +35,32 @@ def pad(text: str, cols: int) -> str:
     return text + " " * max(0, cols - width(text))
 
 
-def frame(emote: str, tick: int) -> list[str]:
+MIRROR = dict(zip("()[]{}<>/\\╯╰╭╮┗┛┏┓ᕦᕤ☞☜ﾉヽノ彡ミ▐▌▖▗▘▝▙▟▛▜«»\u0300\u0301",
+                  ")(][}{><\\/╰╯╮╭┛┗┓┏ᕤᕦ☜☞ヽﾉヽミ彡▌▐▗▖▝▘▟▙▜▛»«\u0301\u0300"))
+
+
+def _graphemes(text: str) -> list[str]:
+    """Split into base characters with their combining marks attached."""
+    clusters: list[str] = []
+    for ch in text:
+        if clusters and unicodedata.combining(ch):
+            clusters[-1] += ch
+        else:
+            clusters.append(ch)
+    return clusters
+
+
+def mirror(rows: list[str]) -> list[str]:
+    """Flip a sprite horizontally so he faces the other way."""
+    cols = max(width(r) for r in rows)
+    return ["".join("".join(MIRROR.get(c, c) for c in g) for g in reversed(_graphemes(pad(r, cols))))
+            for r in rows]
+
+
+def frame(emote: str, tick: int, facing: str = "right") -> list[str]:
     frames = EMOTES[emote]["frames"]
-    return frames[tick % len(frames)]
+    rows = frames[tick % len(frames)]
+    return mirror(rows) if facing == "left" else rows
 
 
 def bubble(line: str, name: str = "Küf") -> list[str]:
@@ -55,8 +78,10 @@ def bubble(line: str, name: str = "Küf") -> list[str]:
 
 
 def compose(emote: str, line: str, tick: int, mood: str | None = None,
-            color: bool = True, name: str = "Küf") -> str:
-    sprite = frame(emote, tick)
+            color: bool = True, name: str = "Küf", facing: str = "right") -> str:
+    """Goblin plus speech bubble. Facing right he sits left of the bubble; facing left
+    (toward a neighbor on the left) he's mirrored and sits right of it."""
+    sprite = frame(emote, tick, facing)
     speech = bubble(line, name)
     rows = max(len(sprite), len(speech))
     sprite = [""] * (rows - len(sprite)) + sprite     # sit him on the bottom
@@ -66,10 +91,17 @@ def compose(emote: str, line: str, tick: int, mood: str | None = None,
     tint = "" if not color else (MOOD_COLOR["furious"] if feeling == "furious" else buddy_tint(name))
     dim, reset = (DIM, RESET) if color else ("", "")
 
+    bubble_cols = max(width(b) for b in speech)
     out = []
     for i, (s, b) in enumerate(zip(sprite, speech)):
-        if i == face_row and b.startswith("│"):
-            b = "<" + b[1:]   # the bubble's tail points at his mouth
-        left = f"{tint}{pad(s, SPRITE_COLS)}{reset}"
-        out.append(f"{left} {dim}{b}{reset}" if b else left)
+        if facing == "left":
+            if i == face_row and b.endswith("│"):
+                b = b[:-1] + ">"   # tail points at his mouth, now on his left
+            text = f"{dim}{pad(b, bubble_cols)}{reset} " if b else " " * (bubble_cols + 1)
+            out.append(f"{text}{tint}{s}{reset}".rstrip() if color else f"{text}{s}".rstrip())
+        else:
+            if i == face_row and b.startswith("│"):
+                b = "<" + b[1:]    # the bubble's tail points at his mouth
+            left = f"{tint}{pad(s, SPRITE_COLS)}{reset}"
+            out.append(f"{left} {dim}{b}{reset}" if b else left)
     return "\n".join(out)
