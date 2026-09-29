@@ -9,7 +9,8 @@ import zlib
 from pathlib import Path
 
 from . import state
-from .banter import context_for_claude, fresh_neighbor, retort, should_retort
+from .banter import (context_for_claude, fresh_neighbor, incoming_reply, last_word, retort,
+                     should_retort)
 from .config import set_value, user_name
 from .gossip import current_line as gossip_line
 from .emotes import EMOTES, IDLE_BY_MOOD
@@ -47,10 +48,13 @@ def current_view(s: dict, owner: str, name: str, now: float) -> tuple[str, str, 
         return emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling
     if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
         return reaction["emote"], reaction["line"], None
+    exchange = incoming_reply(s, owner, name, now) or last_word(reaction, now)
+    if exchange:
+        return (*exchange, None)
     chat = gossip_line(s, owner, user_name(), now)
     if chat:
         return (*chat, None)
-    hit = fresh_neighbor(s, owner, reaction["ts"] if reaction else 0.0, now)
+    hit = fresh_neighbor(s, owner, reaction["ts"] if reaction else 0.0, now, name)
     if hit and should_retort(name, hit[2]):
         return (*retort(name, hit[0], hit[1], hit[2], owner), None)
     if age < REACTION_TTL_S and reaction["emote"] in EMOTES:

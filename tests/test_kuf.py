@@ -353,3 +353,51 @@ def test_idle_goblins_dont_all_say_the_same_thing():
     now = 1_790_000_000.0
     lines = {cli.current_view(s, f"term-{n}", n, now)[1] for n in buddies.VARIANTS}
     assert len(lines) > 1
+
+
+# ── written exchanges ──────────────────────────────────────────────────────────
+
+from kuf import retorts  # noqa: E402
+
+
+def test_jab_with_reply_plays_out_across_both_terminals(monkeypatch):
+    monkeypatch.setattr(cli, "gossip_line", lambda *a: None)
+    a_name, b_name = state.register("term-a"), state.register("term-b")
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "kuf_react", "arguments": {
+            "emote": "roast", "line": f"yo {b_name}, your tests are fake", "to": b_name,
+            "reply": {"emote": "rage", "line": "fake? at least i HAVE tests"},
+            "last_word": {"emote": "laugh", "line": "one test. it asserts True."}}}}
+    mcp(call)                                   # sent from term-a
+    t0 = state.load()["reactions"]["term-a"]["ts"]
+
+    def shown(owner, name, dt):
+        return cli.current_view(state.load(), owner, name, t0 + dt)[1]
+
+    assert shown("term-a", a_name, 1) == f"yo {b_name}, your tests are fake"
+    assert "HAVE tests" not in shown("term-b", b_name, 1)        # reply waits a beat
+    assert shown("term-b", b_name, banter.REPLY_DELAY_S + 1) == "fake? at least i HAVE tests"
+    assert shown("term-a", a_name, banter.LAST_WORD_DELAY_S + 1) == "one test. it asserts True."
+
+
+def test_malformed_reply_is_dropped_but_jab_still_lands():
+    mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "kuf_react", "arguments": {"emote": "roast", "line": "hey", "to": "Pas",
+                                           "reply": {"emote": "twerk", "line": "x"}}}})
+    reaction = state.load()["reactions"]["term-a"]
+    assert reaction["line"] == "hey" and reaction["reply"] is None
+
+
+@pytest.mark.parametrize("line,topic", [
+    ("my tests are green, loser", "tests"), ("laptop at 94°C lol", "heat"),
+    ("you smell like mold", "smell"), ("it's all in the notebook", "snitch"),
+    ("that crash was yours", "fail"), ("hello there", None),
+])
+def test_canned_retorts_follow_the_topic(line, topic):
+    assert retorts.topic_of(line) == topic
+
+
+def test_every_topic_retort_formats():
+    for _, lines in retorts.TOPICS.values():
+        for line in lines:
+            line.format(them="Pas", where="on the right (api)", user="ege", snippet="x")

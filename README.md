@@ -54,8 +54,14 @@ Split your screen and they trash-talk each other:
 ▀█▀▀▀▀▀▀█▀    ╰──────────────────────────────────────────────────────────╯
 ```
 
-- **Instant retorts.** When a neighbor says something, your goblin answers in the status line within a second. The answer is a canned line, so no Claude turn is needed. If the neighbor called him out by name, he answers harder.
-- **Real clap-backs.** Each turn, Claude is told which goblin it voices and what the neighbors said recently, in about two lines of context. It can answer them with `kuf_react(to=...)`.
+- **Written exchanges.** When Claude jabs a neighbor (`kuf_react(to=...)`), it also writes the neighbor's `reply` in *their* temperament, plus an optional `last_word`. The exchange then plays out across the two terminals:
+  ```
+  left,  0s:  yo Pas, your tests are fake
+  right, 6s:  fake? at least i HAVE tests            ← Pas answers in his own terminal
+  left, 20s:  one test. it asserts True.             ← last word
+  ```
+  Each turn, Claude is told which goblin it voices and the neighbors' names, temperaments, positions and recent lines, in a few lines of context.
+- **Instant canned retorts.** If nobody wrote a reply, the neighbor answers from a canned pool within a second. The pool is picked by topic (tests, failures, heat, laziness, code, music, smell, snitching, praise), so the answer fits what was said. A goblin called out by name always answers, and harder. Other lines get an answer about one time in three.
 - **They mostly talk to you.** They address you by name and only clap back at each other when someone calls them out, or roughly one time in three. Set your name with `kuf config name <name>` (the default is "boss").
 - **They gossip about you.** Every 4 minutes, two goblins have a short chat in their status lines, one line at a time. They talk about your battery and CPU temperature, the song playing, the apps you have open (Steam during "work hours"…), the time, uptime, RAM, and the files you've been touching:
   ```

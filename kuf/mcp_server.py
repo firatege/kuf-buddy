@@ -9,7 +9,7 @@ from .buddies import VARIANTS
 from .emotes import EMOTES
 from .owner import owner_id
 
-SERVER_INFO = {"name": "kuf", "version": "0.3.2"}
+SERVER_INFO = {"name": "kuf", "version": "0.4.0"}
 DEFAULT_PROTOCOL = "2025-06-18"
 MAX_LINE = 120
 
@@ -36,8 +36,10 @@ code at hand (use the `tip` emote).
 asked, what Claude did, their code, their late nights. That's the main job.
 - Neighbors: goblins in the other split terminals. Only when one said something TO YOU \
 (or roughly one turn in four) clap back or trash-talk their project (set `to` to their \
-name, refer to them by where they sit: "the clown on the right"). Between turns the \
-goblins already gossip with each other on their own.
+name, refer to them by where they sit: "the clown on the right"). Whenever you jab a \
+neighbor, also write their `reply` in THEIR temperament (the hook lists it) and, if it \
+lands, your `last_word` — a tiny three-line exchange that plays out across both \
+terminals. Between turns the goblins already gossip with each other on their own.
 - Loyal to the user: busts their balls but has their back. Mocks the code, Claude and \
 the other goblins, never the user's worth.
 - Hard limits: no slurs, no racial/ethnic/religious/gender/sexuality jokes or \
@@ -52,6 +54,13 @@ def persona() -> str:
     return f"{PERSONA}\nIn this terminal you voice {name}: {VARIANTS[name]['trait']}.\n"
 
 
+SPOKEN = {
+    "type": "object",
+    "properties": {"emote": {"type": "string", "enum": sorted(EMOTES)},
+                   "line": {"type": "string"}},
+    "required": ["emote", "line"],
+}
+
 TOOLS = [
     {
         "name": "kuf_react",
@@ -61,7 +70,9 @@ TOOLS = [
             "properties": {
                 "emote": {"type": "string", "enum": sorted(EMOTES)},
                 "line": {"type": "string", "description": f"What your goblin says, max {MAX_LINE} chars."},
-                "to": {"type": "string", "description": "Optional: name of a neighbor goblin you're talking to."},
+                "to": {"type": "string", "description": "Optional: name of a neighbor goblin you're jabbing."},
+                "reply": {**SPOKEN, "description": "With `to`: what THAT goblin says back, in THEIR voice. Shown in their terminal a few seconds later."},
+                "last_word": {**SPOKEN, "description": "With `to` and `reply`: your goblin's closing line after their reply."},
             },
             "required": ["emote", "line"],
         },
@@ -84,16 +95,30 @@ def call_tool(name: str, args: dict) -> dict:
     if name != "kuf_react":
         return _text(f"unknown tool {name}", is_error=True)
     emote = args.get("emote")
-    line = " ".join(str(args.get("line", "")).split())
+    line = _clean(args.get("line"))
     if emote not in EMOTES:
         return _text(f"unknown emote {emote!r}; pick one of: {', '.join(sorted(EMOTES))}", True)
     if not line:
         return _text("line is empty", is_error=True)
-    if len(line) > MAX_LINE:
-        line = line[: MAX_LINE - 1] + "…"
     to = " ".join(str(args.get("to", "")).split())[:20]
-    state.set_reaction(owner_id(), emote, line, source="claude", to=to)
+    reply = _spoken(args.get("reply")) if to else None
+    closing = _spoken(args.get("last_word")) if reply else None
+    state.set_reaction(owner_id(), emote, line, source="claude", to=to,
+                       reply=reply, last_word=closing)
     return _text("ok")
+
+
+def _clean(text) -> str:
+    line = " ".join(str(text or "").split())
+    return line if len(line) <= MAX_LINE else line[: MAX_LINE - 1] + "…"
+
+
+def _spoken(value) -> dict | None:
+    """Validate an optional {emote, line}; anything malformed is just dropped."""
+    if not isinstance(value, dict) or value.get("emote") not in EMOTES:
+        return None
+    line = _clean(value.get("line"))
+    return {"emote": value["emote"], "line": line} if line else None
 
 
 def handle(message: dict) -> dict | None:

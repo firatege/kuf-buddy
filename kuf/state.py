@@ -83,8 +83,10 @@ def add_event(owner: str, event: dict) -> dict:
     return update(lambda s: {**s, "events": s["events"] + [stamped]})
 
 
-def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "") -> dict:
-    reaction = {"emote": emote, "line": line, "source": source, "to": to, "ts": time.time()}
+def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
+                 reply: dict | None = None, last_word: dict | None = None) -> dict:
+    reaction = {"emote": emote, "line": line, "source": source, "to": to,
+                "reply": reply, "last_word": last_word, "ts": time.time()}
     return update(lambda s: {**s, "reactions": {**s["reactions"], owner: reaction}})
 
 
