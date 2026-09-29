@@ -13,7 +13,7 @@ from pathlib import Path
 MAX_DEPTH = 12
 
 
-def _parent_and_name(pid: int) -> tuple[int, str] | None:
+def parent_and_name(pid: int) -> tuple[int, str] | None:
     stat = Path(f"/proc/{pid}/stat")
     if stat.exists():
         try:
@@ -50,7 +50,7 @@ def owner_id() -> str:
     for _ in range(MAX_DEPTH):
         if pid <= 1:
             break
-        found = _parent_and_name(pid)
+        found = parent_and_name(pid)
         if found is None:
             break
         ppid, name = found

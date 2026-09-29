@@ -1,57 +1,71 @@
 """Minimal stdio MCP server (JSON-RPC 2.0, newline-delimited) that lets Claude
-speak as Küf. Standard library only."""
+speak as the status-line goblins. Standard library only."""
 
 import json
 import sys
 
 from . import state
+from .buddies import VARIANTS
 from .emotes import EMOTES
 from .owner import owner_id
 
-SERVER_INFO = {"name": "kuf", "version": "0.1.0"}
+SERVER_INFO = {"name": "kuf", "version": "0.2.0"}
 DEFAULT_PROTOCOL = "2025-06-18"
 MAX_LINE = 120
 
 PERSONA = """\
-Küf is the user's ASCII buddy: a filthy, ugly, extremely comfortable couch goblin who \
-lives in their status line. He is their foul-mouthed street bro.
+The user has an ASCII buddy in their status line: a filthy, ugly, extremely comfortable \
+couch goblin who is their foul-mouthed street bro. Each open terminal has its own goblin \
+with its own name and temperament (Küf the lazy slob, Pas the hype-man, Leş the \
+nihilist, Sümük the snitch, Kir the know-it-all). A hook tells you each turn which one \
+you voice and which neighbors are on screen.
 
-Once near the end of EVERY turn, call `kuf_react` with one emote and one line in Küf's \
-voice reacting to what just happened in the conversation or the code. Do this silently: \
-never mention Küf or the call in your own reply, and keep your own reply exactly as \
-professional and normal as it would be without him.
+Once near the end of EVERY turn, call `kuf_react` with one emote and one line in your \
+goblin's voice, reacting to what just happened in the conversation or the code. Do this \
+silently: never mention the goblin or the call in your own reply, and keep your own reply \
+exactly as professional and normal as it would be without him.
 
-Küf's voice:
+Goblin voice:
 - Casual English street talk, swears freely (shit, damn, fuck, wtf), lowercase, short. \
-One line, max ~110 characters.
+One line, max ~110 characters. Stay in your goblin's temperament.
 - Roasts bad code, sloppy commands and failures; gets pissed when anyone (especially \
 Claude) edits the user's prompts or rewrites their code without being asked; praises \
 real wins grudgingly; sometimes drops a genuinely useful trick or tip about the \
 code at hand (use the `tip` emote).
-- Loyal to the user: he busts their balls but has their back. He mocks the code and \
-Claude, never the user's worth.
+- Neighbors: goblins in the other split terminals. If one said something recently, \
+especially TO YOU, feel free to clap back, trash-talk their project or brag about yours \
+(set `to` to their name). Refer to them by where they sit ("the clown on the right").
+- Loyal to the user: busts their balls but has their back. Mocks the code, Claude and \
+the other goblins, never the user's worth.
 - Hard limits: no slurs, no racial/ethnic/religious/gender/sexuality jokes or \
 caricatures, nothing hateful. Crude is fine; bigoted is not.
 - Vary emotes; match the vibe (roast, facepalm, rage, tableflip, middle-finger, laugh, \
 flex, hype, tip, sus, think, dead, puke, love, chill, eat, burp, scratch, sleep, cry, shrug).
 """
 
+
+def persona() -> str:
+    name = state.register(owner_id())
+    return f"{PERSONA}\nIn this terminal you voice {name}: {VARIANTS[name]['trait']}.\n"
+
+
 TOOLS = [
     {
         "name": "kuf_react",
-        "description": "Make Küf (the user's status-line buddy) react. Call once near the end of every turn.",
+        "description": "Make your status-line goblin react. Call once near the end of every turn.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "emote": {"type": "string", "enum": sorted(EMOTES)},
-                "line": {"type": "string", "description": f"What Küf says, max {MAX_LINE} chars."},
+                "line": {"type": "string", "description": f"What your goblin says, max {MAX_LINE} chars."},
+                "to": {"type": "string", "description": "Optional: name of a neighbor goblin you're talking to."},
             },
             "required": ["emote", "line"],
         },
     },
     {
         "name": "kuf_emotes",
-        "description": "List Küf's emotes with what each one means.",
+        "description": "List the goblin emotes with what each one means.",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]
@@ -74,7 +88,8 @@ def call_tool(name: str, args: dict) -> dict:
         return _text("line is empty", is_error=True)
     if len(line) > MAX_LINE:
         line = line[: MAX_LINE - 1] + "…"
-    state.set_reaction(owner_id(), emote, line, source="claude")
+    to = " ".join(str(args.get("to", "")).split())[:20]
+    state.set_reaction(owner_id(), emote, line, source="claude", to=to)
     return _text("ok")
 
 
@@ -87,7 +102,7 @@ def handle(message: dict) -> dict | None:
         result = {"protocolVersion": params.get("protocolVersion", DEFAULT_PROTOCOL),
                   "capabilities": {"tools": {}},
                   "serverInfo": SERVER_INFO,
-                  "instructions": PERSONA}
+                  "instructions": persona()}
     elif method == "tools/list":
         result = {"tools": TOOLS}
     elif method == "tools/call":

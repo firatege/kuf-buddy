@@ -3,6 +3,7 @@
 import textwrap
 import unicodedata
 
+from .buddies import tint as buddy_tint
 from .emotes import EMOTES
 
 SPRITE_COLS = 13
@@ -39,27 +40,30 @@ def frame(emote: str, tick: int) -> list[str]:
     return frames[tick % len(frames)]
 
 
-def bubble(line: str) -> list[str]:
+def bubble(line: str, name: str = "Küf") -> list[str]:
     wrapped = textwrap.wrap(line, BUBBLE_TEXT_COLS) or [""]
     if len(wrapped) > BUBBLE_MAX_LINES:
         wrapped = wrapped[:BUBBLE_MAX_LINES]
         wrapped[-1] = wrapped[-1][: BUBBLE_TEXT_COLS - 1] + "…"
     inner = max(width(w) for w in wrapped)
-    label = "─ Küf "
-    top = f"╭{label}{'─' * max(0, inner + 2 - len(label))}╮"
+    label = f"─ {name} "
+    inner = max(inner, width(label) - 2)
+    top = f"╭{label}{'─' * (inner + 2 - width(label))}╮"
     body = [f"│ {pad(w, inner)} │" for w in wrapped]
     bottom = f"╰{'─' * (inner + 2)}╯"
     return [top, *body, bottom]
 
 
-def compose(emote: str, line: str, tick: int, mood: str | None = None, color: bool = True) -> str:
+def compose(emote: str, line: str, tick: int, mood: str | None = None,
+            color: bool = True, name: str = "Küf") -> str:
     sprite = frame(emote, tick)
-    speech = bubble(line)
+    speech = bubble(line, name)
     rows = max(len(sprite), len(speech))
     sprite = [""] * (rows - len(sprite)) + sprite     # sit him on the bottom
     speech = speech + [""] * (rows - len(speech))
     face_row = rows - 3
-    tint = MOOD_COLOR[mood or EMOTE_MOOD.get(emote, "comfy")] if color else ""
+    feeling = mood or EMOTE_MOOD.get(emote, "comfy")
+    tint = "" if not color else (MOOD_COLOR["furious"] if feeling == "furious" else buddy_tint(name))
     dim, reset = (DIM, RESET) if color else ("", "")
 
     out = []

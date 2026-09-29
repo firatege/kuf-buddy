@@ -56,6 +56,19 @@ LINES = {
         "ok ok it passed. don't get cocky.",
         "look at that, it works. i'm tearing up. it's the mold.",
     ],
+    "retort": [
+        "{them} {where} thinks he's funny. he isn't.",
+        "lmao listen to {them} {where}: \"{snippet}\". clown.",
+        "yo {them}, mind your own damn terminal.",
+        "{them} {where} is yapping again. *throws a chip at him*",
+        "nobody asked you, {them}. go touch grass. or mold.",
+    ],
+    "comeback": [
+        "{them} came at me?? your code smells worse than me, {them}.",
+        "oh {them} wants smoke. bring it, you crusty bastard.",
+        "talk to me when your tests pass, {them}.",
+        "{them} {where} talking shit again. i'll eat your crumbs, bitch.",
+    ],
     "night": [
         "it's {hour}:00. real goblins are asleep. so should you be.",
         "*snore* ...commit tomorrow, dumbass...",
@@ -81,8 +94,8 @@ def _fields(event: dict | None, n: int) -> dict:
             "n": n, "hour": f"{datetime.now().hour:02d}"}
 
 
-def canned(kind: str, event: dict | None, n: int, seed: str) -> str:
-    return pick(LINES[kind], seed).format(**_fields(event, n))
+def canned(kind: str, event: dict | None, n: int, seed: str, **extra: str) -> str:
+    return pick(LINES[kind], seed).format(**{**_fields(event, n), **extra})
 
 
 def edit_count(events: list[dict]) -> int:

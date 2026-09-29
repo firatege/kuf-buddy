@@ -158,7 +158,7 @@ def test_owner_is_found_by_walking_up_to_claude(monkeypatch):
     owner.owner_id.cache_clear()
     tree = {100: (50, "python3"), 50: (40, "sh"), 40: (1, "claude")}
     monkeypatch.setattr(owner.os, "getppid", lambda: 100)
-    monkeypatch.setattr(owner, "_parent_and_name", lambda pid: tree.get(pid))
+    monkeypatch.setattr(owner, "parent_and_name", lambda pid: tree.get(pid))
     assert owner.owner_id() == "40"
     owner.owner_id.cache_clear()
 
@@ -217,3 +217,58 @@ def test_install_statusline_backs_up_and_strips_legacy_hooks(tmp_path, monkeypat
     assert "bin/kuf" in settings["statusLine"]["command"]
     assert settings["hooks"]["PostToolUse"] == [{"matcher": "Bash", "hooks": [other]}]
     assert list(tmp_path.glob("settings.json.bak-kuf-*"))
+
+
+# ── the gang: names, neighbors, banter ─────────────────────────────────────────
+
+from kuf import banter, buddies, screen  # noqa: E402
+
+
+def test_live_terminals_get_different_goblins():
+    names = {state.register(f"term-{i}") for i in range(len(buddies.VARIANTS))}
+    assert names == set(buddies.VARIANTS)
+    assert state.register("term-0") == state.register("term-0")   # stable
+
+
+def win(ws, col, row):
+    return {"workspace_id": ws, "layout": {"pos_in_scrolling_layout": [col, row]}}
+
+
+@pytest.mark.parametrize("theirs,expected", [
+    (win(1, 3, 1), "on the right"), (win(1, 1, 1), "on the left"),
+    (win(1, 5, 1), "way off to the right"), (win(1, 2, 1), "right above you"),
+    (win(2, 2, 2), "on another workspace"), (None, ""),
+])
+def test_direction_from_niri_layout(theirs, expected):
+    assert screen.direction(win(1, 2, 2), theirs) == expected
+
+
+def test_neighbor_line_gets_an_instant_retort(monkeypatch):
+    monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the right (api)" for o in others})
+    b_name = state.register("term-b")
+    a_name = state.register("term-a")
+    state.set_reaction("term-b", "flex", "my tests are green, loser", source="claude")
+
+    emote, line, _ = cli.current_view(state.load(), "term-a", a_name, time.time())
+    assert b_name in line and emote in banter.RETORT_EMOTES
+
+    state.set_reaction("term-b", "roast", "yo, your code sucks", source="claude", to=a_name)
+    emote, line, _ = cli.current_view(state.load(), "term-a", a_name, time.time())
+    assert emote in banter.COMEBACK_EMOTES
+
+
+def test_claude_gets_told_who_it_voices_and_who_said_what(monkeypatch):
+    monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the left (web)" for o in others})
+    state.register("term-b")
+    me = state.register("term-a")
+    state.set_reaction("term-b", "roast", "lmao that diff", source="claude", to=me)
+
+    note = banter.context_for_claude("term-a")
+    assert f"you voice {me}" in note
+    assert "on the left (web)" in note and "lmao that diff" in note and "(TO YOU)" in note
+
+
+def test_prompt_hook_emits_additional_context():
+    out = run_bin("hook", "prompt", stdin="{}").stdout
+    ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert "[kuf-buddy]" in ctx

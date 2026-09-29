@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
+from .buddies import assign
 from .owner import is_alive
 
 MAX_EVENTS = 200
@@ -28,7 +29,7 @@ def state_file() -> Path:
 
 
 def empty_state() -> dict:
-    return {"events": [], "reactions": {}, "turns": {}}
+    return {"events": [], "reactions": {}, "turns": {}, "buddies": {}}
 
 
 def load() -> dict:
@@ -62,6 +63,7 @@ def _prune(s: dict, now: float) -> dict:
         "events": [e for e in s["events"] if keep(e.get("owner", ""), e["ts"])][-MAX_EVENTS:],
         "reactions": {o: r for o, r in s["reactions"].items() if keep(o, r["ts"])},
         "turns": {o: ts for o, ts in s["turns"].items() if keep(o, ts)},
+        "buddies": {o: b for o, b in s["buddies"].items() if is_alive(o)},
     }
 
 
@@ -80,8 +82,8 @@ def add_event(owner: str, event: dict) -> dict:
     return update(lambda s: {**s, "events": s["events"] + [stamped]})
 
 
-def set_reaction(owner: str, emote: str, line: str, source: str) -> dict:
-    reaction = {"emote": emote, "line": line, "source": source, "ts": time.time()}
+def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "") -> dict:
+    reaction = {"emote": emote, "line": line, "source": source, "to": to, "ts": time.time()}
     return update(lambda s: {**s, "reactions": {**s["reactions"], owner: reaction}})
 
 
@@ -93,3 +95,25 @@ def view(s: dict, owner: str) -> tuple[list[dict], dict | None, float]:
     """This terminal's (events, last reaction, current turn start)."""
     events = [e for e in s["events"] if e.get("owner") == owner]
     return events, s["reactions"].get(owner), s["turns"].get(owner, 0.0)
+
+
+def register(owner: str) -> str:
+    """Name of this terminal's goblin, picking a free one the first time we see it."""
+    known = load()["buddies"].get(owner)
+    if known:
+        return known["name"]
+
+    def change(s: dict) -> dict:
+        if owner in s["buddies"]:
+            return s
+        taken = {b["name"] for o, b in s["buddies"].items() if is_alive(o)}
+        buddy = {"name": assign(owner, taken), "since": time.time()}
+        return {**s, "buddies": {**s["buddies"], owner: buddy}}
+
+    return update(change)["buddies"][owner]["name"]
+
+
+def neighbors(s: dict, owner: str) -> dict[str, dict]:
+    """Other live terminals' goblins: owner -> {name, reaction}."""
+    return {o: {"name": b["name"], "reaction": s["reactions"].get(o)}
+            for o, b in s["buddies"].items() if o != owner}

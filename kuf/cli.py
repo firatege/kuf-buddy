@@ -8,12 +8,14 @@ import time
 from pathlib import Path
 
 from . import state
+from .banter import context_for_claude, fresh_neighbor, retort
 from .emotes import EMOTES, IDLE_BY_MOOD
 from .events import TEST_CMD, canned, classify, edit_count, mood, pick, turn_fallback
 from .owner import owner_id
 from .render import compose
 
 REACTION_TTL_S = 150
+JUST_SPOKE_S = 20   # his own fresh line beats answering the neighbors
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 BIN = Path(__file__).resolve().parent.parent / "bin" / "kuf"
 LEGACY_MARKER = "/pet/kuf.py"
@@ -29,16 +31,22 @@ def read_payload() -> dict:
 
 # ── status line ────────────────────────────────────────────────────────────────
 
-def current_view(s: dict, owner: str, now: float) -> tuple[str, str, str | None]:
+def current_view(s: dict, owner: str, name: str, now: float) -> tuple[str, str, str | None]:
     """Decide (emote, line, mood) to show right now in this terminal."""
     events, reaction, _ = state.view(s, owner)
     feeling, kind, trigger = mood(events, now)
     edits = edit_count(events)
+    age = now - reaction["ts"] if reaction else float("inf")
 
     if trigger and (not reaction or trigger["ts"] > reaction["ts"]):
         emote = pick(IDLE_BY_MOOD[feeling], str(trigger["ts"]))
         return emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling
-    if reaction and now - reaction["ts"] < REACTION_TTL_S and reaction["emote"] in EMOTES:
+    if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
+        return reaction["emote"], reaction["line"], None
+    hit = fresh_neighbor(s, owner, reaction["ts"] if reaction else 0.0, now)
+    if hit:
+        return (*retort(name, hit[0], hit[1], hit[2], owner), None)
+    if age < REACTION_TTL_S and reaction["emote"] in EMOTES:
         return reaction["emote"], reaction["line"], None
     slot = str(int(now // 600))
     return pick(IDLE_BY_MOOD[feeling], slot), canned(kind, trigger, edits, slot), feeling
@@ -47,8 +55,10 @@ def current_view(s: dict, owner: str, now: float) -> tuple[str, str, str | None]
 def cmd_status() -> None:
     read_payload()   # drain stdin; the owner PID already identifies this terminal
     now = time.time()
-    emote, line, feeling = current_view(state.load(), owner_id(), now)
-    print(compose(emote, line, int(now), feeling))
+    owner = owner_id()
+    name = state.register(owner)
+    emote, line, feeling = current_view(state.load(), owner, name, now)
+    print(compose(emote, line, int(now), feeling, name=name))
 
 
 # ── hooks ──────────────────────────────────────────────────────────────────────
@@ -70,7 +80,10 @@ def hook_fail(payload: dict) -> None:
 
 
 def hook_prompt(payload: dict) -> None:
-    state.start_turn(owner_id())
+    owner = owner_id()
+    state.start_turn(owner)
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                             "additionalContext": context_for_claude(owner)}}))
 
 
 def hook_stop(payload: dict) -> None:
@@ -187,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
     elif command == "preview":
         cmd_preview(rest)
     elif command == "say" and len(rest) >= 2 and rest[0] in EMOTES:
+        state.register(owner_id())
         state.set_reaction(owner_id(), rest[0], " ".join(rest[1:]), source="cli")
     elif command == "install-statusline":
         cmd_install_statusline()

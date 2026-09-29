@@ -33,6 +33,31 @@ He naps on a stained couch until something happens. Then he roasts your code, lo
 
 It needs only standard-library Python 3.10+. No dependencies, no API keys.
 
+### The couch gang: one goblin per terminal
+
+Every open Claude Code terminal gets its own goblin, each with its own mood, memory and temperament. No two live terminals share one.
+
+| Goblin | Means | Temperament |
+|---|---|---|
+| **Küf** | mold | lazy, grumpy slob |
+| **Pas** | rust | hyperactive hype-man, ALL CAPS |
+| **Leş** | carcass | dead-inside nihilist |
+| **Sümük** | snot | petty snitch, keeps score |
+| **Kir** | grime | smug know-it-all, drops tricks |
+
+Split your screen and they trash-talk each other:
+
+```
+  ·lmao       ╭─ Sümük ──────────────────────────────────────────────────╮
+ (☞ﾟヮﾟ)☞     < Küf on the right (ced-demo) talking shit again. i'll eat │
+/|▓▓▓|\ ,,    │ your crumbs, bitch.                                      │
+▀█▀▀▀▀▀▀█▀    ╰──────────────────────────────────────────────────────────╯
+```
+
+- **Instant retorts.** When a neighbor says something, your goblin answers in the status line within a second. The answer is a canned line, so no Claude turn is needed. If the neighbor called him out by name, he answers harder.
+- **Real clap-backs.** Each turn, Claude is told which goblin it voices and what the neighbors said recently, in about two lines of context. It can answer them with `kuf_react(to=...)`.
+- **They know where they sit.** On [niri](https://github.com/YaLTeR/niri), goblins find each other's windows and say "on the right", "right above you" or "way off to the left". Everywhere else, they use the project name.
+
 ### Emotes
 
 `chill` `sleep` `eat` `burp` `scratch` `laugh` `roast` `rage` `tableflip` `middle-finger` `facepalm` `flex` `hype` `cry` `dead` `sus` `think` `tip` `shrug` `love` `puke`
