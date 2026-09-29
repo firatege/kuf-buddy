@@ -110,7 +110,19 @@ def hook_stop(payload: dict) -> None:
         state.set_reaction(owner, *picked, source="fallback")
 
 
-HOOKS = {"post": hook_post, "fail": hook_fail, "prompt": hook_prompt, "stop": hook_stop}
+def hook_start(payload: dict) -> None:
+    """New terminal: claim a goblin and say hi so he's alive from the first second."""
+    if payload.get("source") not in (None, "startup", "resume", "clear"):
+        return   # e.g. after /compact he's already here
+    owner = owner_id()
+    name = state.register(owner)
+    line = canned("greet", None, 0, f"{time.time()}{owner}", name=name)
+    state.set_reaction(owner, pick(["chill", "scratch", "burp", "eat"], owner), line,
+                       source="greet")
+
+
+HOOKS = {"post": hook_post, "fail": hook_fail, "prompt": hook_prompt, "stop": hook_stop,
+         "start": hook_start}
 
 
 def cmd_hook(name: str) -> None:
@@ -189,7 +201,7 @@ def cmd_uninstall_statusline() -> None:
 
 USAGE = """usage: kuf <command>
   status                 render the status line (reads Claude Code JSON on stdin)
-  hook post|fail|prompt|stop
+  hook start|post|fail|prompt|stop
   mcp                    run the MCP server on stdio
   preview [emote|--all]  show emotes in your terminal
   say <emote> <line...>  make your goblin say something right now

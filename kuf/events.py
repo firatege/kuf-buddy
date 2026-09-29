@@ -75,6 +75,14 @@ LINES = {
         "talk to me when your tests pass, {them}.",
         "{them} {where} talking shit again. i'll eat your crumbs, bitch.",
     ],
+    "greet": [
+        "*crawls onto the couch* sup {user}. what are we breaking today?",
+        "yo {user}. i'm {name}. i live here now. don't touch my crumbs.",
+        "another terminal? {user}, you have a problem. i'm {name}, btw.",
+        "{name} reporting for duty. by duty i mean lying down. hi {user}.",
+        "*yawns* {user}, you woke me up. this better be good.",
+        "back again {user}? fine. {name}'s on the couch. do your thing.",
+    ],
     "night": [
         "it's {hour}:00. real goblins are asleep. so should you be.",
         "*snore* ...commit tomorrow, dumbass...",

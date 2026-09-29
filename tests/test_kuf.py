@@ -401,3 +401,18 @@ def test_every_topic_retort_formats():
     for _, lines in retorts.TOPICS.values():
         for line in lines:
             line.format(them="Pas", where="on the right (api)", user="ege", snippet="x")
+
+
+def test_session_start_registers_and_greets_the_user():
+    config.set_value("name", "ege")
+    cli.hook_start({"source": "startup"})
+    reaction = state.load()["reactions"]["term-a"]
+    name = state.load()["buddies"]["term-a"]["name"]
+    assert reaction["source"] == "greet"
+    assert "ege" in reaction["line"] or name in reaction["line"]
+    assert "{" not in reaction["line"]
+
+
+def test_session_start_after_compact_stays_quiet():
+    cli.hook_start({"source": "compact"})
+    assert "term-a" not in state.load()["reactions"]
