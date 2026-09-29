@@ -57,6 +57,22 @@ SCRIPTS = [
         (0, "sleep", "it's {hour}:00 and {user} is still up. someone call their mom"),
         (1, "dead", "their mom is asleep, {a}. like normal people"),
     ]),
+    (lambda f: 1 <= f.get("hour", 12) < 6, [
+        (0, "sleep", "psst {b}. you awake?"),
+        (1, "dead", "no. i'm dead. what do you want"),
+        (0, "sus", "{user} is still typing. at {hour}:00. should we worry?"),
+        (1, "sleep", "we should sleep. that's what we should do. zzz"),
+    ]),
+    (lambda f: 1 <= f.get("hour", 12) < 6, [
+        (0, "sleep", "*snore*"),
+        (1, "sleep", "*louder snore*"),
+        (0, "rage", "stop snoring {b}, i'm trying to snore here"),
+    ]),
+    (lambda f: 1 <= f.get("hour", 12) < 6, [
+        (0, "think", "what do you think {user} dreams about?"),
+        (1, "laugh", "green tests and a laptop under 80°C. pure fantasy"),
+        (0, "cry", "that's beautiful. go back to sleep"),
+    ]),
     (lambda f: 6 <= f.get("hour", 0) < 10, [
         (0, "sus", "{user} is up before noon?? something's wrong"),
         (1, "eat", "coffee. it's always coffee"),
