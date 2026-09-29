@@ -46,11 +46,12 @@ def current_view(s: dict, owner: str, name: str, now: float) -> tuple[str, str, 
     if trigger and (not reaction or trigger["ts"] > reaction["ts"]):
         emote = pick(IDLE_BY_MOOD[feeling], str(trigger["ts"]))
         return emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling
-    if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
-        return reaction["emote"], reaction["line"], None
-    exchange = incoming_reply(s, owner, name, now) or last_word(reaction, now)
+    # A written exchange runs on its own clock: the last word may cut our own line short.
+    exchange = last_word(reaction, now) or incoming_reply(s, owner, name, now)
     if exchange:
         return (*exchange, None)
+    if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
+        return reaction["emote"], reaction["line"], None
     chat = gossip_line(s, owner, user_name(), now)
     if chat:
         return (*chat, None)
@@ -206,6 +207,7 @@ USAGE = """usage: kuf <command>
   preview [emote|--all]  show emotes in your terminal
   say <emote> <line...>  make your goblin say something right now
   config name <name>     what the goblins call you (default: boss)
+  config words_per_sec <n>  reading speed that paces written exchanges (default: 4)
   install-statusline     put Küf in ~/.claude/settings.json (backs it up first)
   uninstall-statusline"""
 

@@ -377,8 +377,11 @@ def test_jab_with_reply_plays_out_across_both_terminals(monkeypatch):
 
     assert shown("term-a", a_name, 1) == f"yo {b_name}, your tests are fake"
     assert "HAVE tests" not in shown("term-b", b_name, 1)        # reply waits a beat
-    assert shown("term-b", b_name, banter.REPLY_DELAY_S + 1) == "fake? at least i HAVE tests"
-    assert shown("term-a", a_name, banter.LAST_WORD_DELAY_S + 1) == "one test. it asserts True."
+    reaction = state.load()["reactions"]["term-a"]
+    reply_at, last_at = banter.reply_delay(reaction), banter.last_word_delay(reaction)
+    assert shown("term-b", b_name, reply_at + 0.1) == "fake? at least i HAVE tests"
+    assert shown("term-a", a_name, last_at - 0.1) == f"yo {b_name}, your tests are fake"
+    assert shown("term-a", a_name, last_at + 0.1) == "one test. it asserts True."
 
 
 def test_malformed_reply_is_dropped_but_jab_still_lands():
@@ -452,3 +455,21 @@ def test_off_screen_neighbors_get_no_canned_retort_unless_they_call_you_out(monk
     assert banter.fresh_neighbor(state.load(), "term-a", 0, now, me) is None
     state.set_reaction("term-b", "roast", "lol", source="claude", to=me)
     assert banter.fresh_neighbor(state.load(), "term-a", 0, time.time(), me) is not None
+
+
+def test_exchange_pace_follows_line_length():
+    short = {"line": "your tests are fake", "reply": {"line": "nah"}}
+    long_ = {"line": " ".join(["word"] * 18), "reply": {"line": " ".join(["word"] * 40)}}
+    assert banter.reply_delay(short) == banter.REPLY_DELAY_MIN_S
+    assert banter.reply_delay(short) < banter.reply_delay(long_) <= banter.REPLY_DELAY_MAX_S
+    assert banter.last_word_delay(short) < 5
+    assert banter.last_word_delay(long_) == banter.LAST_WORD_DELAY_MAX_S
+
+
+def test_reading_speed_is_configurable():
+    line = {"line": " ".join(["w"] * 12), "reply": {"line": "x"}}
+    before = banter.reply_delay(line)
+    config.set_value("words_per_sec", "12")
+    assert banter.reply_delay(line) < before
+    config.set_value("words_per_sec", "banana")
+    assert banter.reply_delay(line) == before

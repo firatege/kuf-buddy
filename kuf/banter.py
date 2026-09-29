@@ -4,14 +4,15 @@ import time
 
 from . import state
 from .buddies import VARIANTS
-from .config import user_name
+from .config import load as load_config, user_name
 from .events import LINES, pick
 from .retorts import lines_for
 from .screen import describe_neighbors, visible_owners
 
 BANTER_S = 45          # how long a neighbor's line is worth answering in the status line
-REPLY_DELAY_S = 6      # target shows the written reply this long after the jab
-LAST_WORD_DELAY_S = 20 # then the jabber gets the last word
+WORDS_PER_S = 4.0      # comfortable reading speed; `kuf config words_per_sec <n>`
+REPLY_DELAY_MIN_S, REPLY_DELAY_MAX_S = 2.0, 6.0
+LAST_WORD_DELAY_MAX_S = 12.0
 EXCHANGE_S = 40        # how long each of those stays up
 CONTEXT_S = 900        # how old a neighbor's line can be and still be mentioned to Claude
 SNIPPET = 40
@@ -24,6 +25,28 @@ def _snippet(line: str) -> str:
     return line if len(line) <= SNIPPET else line[: SNIPPET - 1] + "…"
 
 
+def _words_per_sec() -> float:
+    try:
+        return max(0.5, float(load_config().get("words_per_sec", WORDS_PER_S)))
+    except (TypeError, ValueError):
+        return WORDS_PER_S
+
+
+def reading_s(line: str) -> float:
+    """Roughly how long it takes to read a line: a beat to notice it, then the words."""
+    return 1.0 + len(line.split()) / _words_per_sec()
+
+
+def reply_delay(reaction: dict) -> float:
+    """The reply lands once the jab has had time to be read."""
+    return min(max(reading_s(reaction["line"]), REPLY_DELAY_MIN_S), REPLY_DELAY_MAX_S)
+
+
+def last_word_delay(reaction: dict) -> float:
+    reply = reaction.get("reply") or {}
+    return min(reply_delay(reaction) + reading_s(reply.get("line", "")), LAST_WORD_DELAY_MAX_S)
+
+
 def _aimed_at(reaction: dict, name: str) -> bool:
     return reaction.get("to", "").lower() == name.lower()
 
@@ -34,8 +57,8 @@ def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, 
         reaction = buddy["reaction"]
         if not reaction or not reaction.get("reply") or not _aimed_at(reaction, my_name):
             continue
-        age = now - reaction["ts"]
-        if REPLY_DELAY_S <= age < REPLY_DELAY_S + EXCHANGE_S:
+        delay = reply_delay(reaction)
+        if delay <= now - reaction["ts"] < delay + EXCHANGE_S:
             return reaction["reply"]["emote"], reaction["reply"]["line"]
     return None
 
@@ -44,8 +67,8 @@ def last_word(reaction: dict | None, now: float) -> tuple[str, str] | None:
     """Our own closing line after the target had its say."""
     if not reaction or not reaction.get("last_word"):
         return None
-    age = now - reaction["ts"]
-    if LAST_WORD_DELAY_S <= age < LAST_WORD_DELAY_S + EXCHANGE_S:
+    delay = last_word_delay(reaction)
+    if delay <= now - reaction["ts"] < delay + EXCHANGE_S:
         return reaction["last_word"]["emote"], reaction["last_word"]["line"]
     return None
 

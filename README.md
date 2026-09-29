@@ -56,10 +56,11 @@ Split your screen and they trash-talk each other:
 
 - **Written exchanges.** When Claude jabs a neighbor (`kuf_react(to=...)`), it also writes the neighbor's `reply` in *their* temperament, plus an optional `last_word`. The exchange then plays out across the two terminals:
   ```
-  left,  0s:  yo Pas, your tests are fake
-  right, 6s:  fake? at least i HAVE tests            ← Pas answers in his own terminal
-  left, 20s:  one test. it asserts True.             ← last word
+  left,  0s:   yo Pas, your tests are fake
+  right, 2s:   fake? at least i HAVE tests           ← Pas answers in his own terminal
+  left,  4.5s: one test. it asserts True.            ← last word
   ```
+  The pacing follows reading time: each line waits about 1 s plus 1 s for every 4 words. The reply lands after 2–6 s, and the last word within 12 s. Tune it with `kuf config words_per_sec <n>`.
   Each turn, Claude is told which goblin it voices and the neighbors' names, temperaments, positions and recent lines, in a few lines of context.
 - **Instant canned retorts.** If nobody wrote a reply, the neighbor answers from a canned pool within a second. The pool is picked by topic (tests, failures, heat, laziness, code, music, smell, snitching, praise), so the answer fits what was said. A goblin called out by name always answers, and harder. Other lines get an answer about one time in three.
 - **They mostly talk to you.** They address you by name and only clap back at each other when someone calls them out, or roughly one time in three. Set your name with `kuf config name <name>` (the default is "boss").
