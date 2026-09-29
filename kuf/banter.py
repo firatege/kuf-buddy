@@ -1,25 +1,23 @@
-"""Goblins in split terminals talking shit to each other."""
+"""Goblins in split terminals talking shit to each other, in lines Claude writes."""
 
+import random
 import time
 
-from . import state
+from . import facts, state
 from .buddies import VARIANTS
 from .config import load as load_config, user_name
-from .events import LINES, pick
-from .retorts import lines_for
-from .screen import describe_neighbors, visible_owners
+from .screen import describe_neighbors
 
-BANTER_S = 45          # how long a neighbor's line is worth answering in the status line
-WORDS_PER_S = 4.0      # comfortable reading speed; `kuf config words_per_sec <n>`
-REPLY_DELAY_MIN_S, REPLY_DELAY_MAX_S = 2.0, 6.0
-LAST_WORD_DELAY_MAX_S = 12.0
-EXCHANGE_S = 60        # how long each of those stays up
+WORDS_PER_S = 2.0      # relaxed reading speed; `kuf config words_per_sec <n>`
+NOTICE_S = 2.0         # a beat to spot the new line, often in another terminal
+REPLY_DELAY_MIN_S, REPLY_DELAY_MAX_S = 4.0, 14.0
+LAST_WORD_DELAY_MAX_S = 28.0
+EXCHANGE_S = 60        # how long the finished exchange stays up before both close
 ANCHOR_WAIT_S = 120    # give up waiting for the turn to end after this long
 CONTEXT_S = 900        # how old a neighbor's line can be and still be mentioned to Claude
 SNIPPET = 40
-RETORT_ODDS = 3        # answer 1 in N neighbor lines that weren't aimed at us
-RETORT_EMOTES = ["sus", "laugh", "middle-finger", "roast", "facepalm", "shrug"]
-COMEBACK_EMOTES = ["rage", "middle-finger", "tableflip", "roast"]
+RECALL = 6             # how many of his own past lines Claude is reminded of
+LIFE_ODDS = 0.75      # 3 turns in 4 the line is about what the user is up to
 
 
 def _snippet(line: str) -> str:
@@ -35,7 +33,7 @@ def _words_per_sec() -> float:
 
 def reading_s(line: str) -> float:
     """Roughly how long it takes to read a line: a beat to notice it, then the words."""
-    return 1.0 + len(line.split()) / _words_per_sec()
+    return NOTICE_S + len(line.split()) / _words_per_sec()
 
 
 def exchange_start(reaction: dict, now: float) -> float | None:
@@ -61,6 +59,18 @@ def last_word_delay(reaction: dict) -> float:
     return min(reply_delay(reaction) + reading_s(reply.get("line", "")), LAST_WORD_DELAY_MAX_S)
 
 
+def exchange_end(reaction: dict) -> float:
+    """Seconds after the start when both sides of the exchange close, together."""
+    return last_word_delay(reaction) + EXCHANGE_S
+
+
+def exchange_over(reaction: dict | None, now: float) -> bool:
+    if not reaction or not reaction.get("reply"):
+        return False
+    start = exchange_start(reaction, now)
+    return start is not None and now - start >= exchange_end(reaction)
+
+
 def _aimed_at(reaction: dict, name: str) -> bool:
     return reaction.get("to", "").lower() == name.lower()
 
@@ -73,69 +83,56 @@ def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, 
             continue
         start = exchange_start(reaction, now)
         delay = reply_delay(reaction)
-        if start is not None and delay <= now - start < delay + EXCHANGE_S:
+        if start is not None and delay <= now - start < exchange_end(reaction):
             return reaction["reply"]["emote"], reaction["reply"]["line"], other
     return None
 
 
 def last_word(reaction: dict | None, now: float) -> tuple[str, str] | None:
-    """Our own closing line after the target had its say."""
+    """Our closing line after the target had its say, stacked under our jab so the
+    whole exchange stays readable."""
     if not reaction or not reaction.get("last_word"):
         return None
     start = exchange_start(reaction, now)
     delay = last_word_delay(reaction)
-    if start is not None and delay <= now - start < delay + EXCHANGE_S:
-        return reaction["last_word"]["emote"], reaction["last_word"]["line"]
+    if start is not None and delay <= now - start < exchange_end(reaction):
+        return reaction["last_word"]["emote"], f'{reaction["line"]}\n{reaction["last_word"]["line"]}'
     return None
 
 
-def fresh_neighbor(s: dict, owner: str, since: float, now: float, my_name: str = "",
-                   window: float = BANTER_S) -> tuple[str, dict, dict] | None:
-    """Newest neighbor reaction after `since` and within `window`: (owner, buddy, reaction).
-
-    Neighbors that are off screen are ignored unless they called us out by name.
-    """
-    hit = _newest(s, owner, since, now, my_name, window)
-    if hit is None or _aimed_at(hit[2], my_name):
-        return hit
-    on_screen = visible_owners([owner, hit[0]])
-    return hit if on_screen is None or hit[0] in on_screen else None
+def topic_note(life: str, roll: float | None = None) -> str:
+    """This turn's topic, drawn here so the 3:1 split holds without Claude keeping count."""
+    roll = random.random() if roll is None else roll
+    if life and roll < LIFE_ODDS:
+        return (f"THIS TURN: talk about what {user_name()} is up to right now, not the task: "
+                f"{life}.")
+    what = f" (for later: {life})" if life else ""
+    return f"THIS TURN: react to the conversation or the code.{what}"
 
 
-def _newest(s: dict, owner: str, since: float, now: float, my_name: str,
-            window: float) -> tuple[str, dict, dict] | None:
-    best = None
-    for other, buddy in state.neighbors(s, owner).items():
-        reaction = buddy["reaction"]
-        if not reaction or reaction.get("source") == "retort":
-            continue
-        if reaction.get("reply") and _aimed_at(reaction, my_name):
-            continue   # a real, written reply is coming; don't talk over it
-        if reaction["ts"] <= since or now - reaction["ts"] > window:
-            continue
-        if best is None or reaction["ts"] > best[2]["ts"]:
-            best = (other, buddy, reaction)
-    return best
+def _ago(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes}m ago"
+    return f"{minutes // 60}h ago" if minutes < 1440 else f"{minutes // 1440}d ago"
 
 
-def should_retort(my_name: str, reaction: dict) -> bool:
-    """Always answer a call-out; otherwise only now and then, so they talk to the user more."""
-    if _aimed_at(reaction, my_name):
-        return True
-    return int(reaction["ts"] * 1000) % RETORT_ODDS == 0
-
-
-def retort(my_name: str, other: str, buddy: dict, reaction: dict, owner: str) -> tuple[str, str]:
-    """Canned answer to a neighbor that fits what they talked about; harsher if called out."""
-    where = describe_neighbors(owner, [other])[other]
-    seed = f"{reaction['ts']}{my_name}"
-    called_out = _aimed_at(reaction, my_name)
-    kind, emotes = ("comeback", COMEBACK_EMOTES) if called_out else ("retort", RETORT_EMOTES)
-    # Mostly answer on-topic; the generic pool keeps some variety.
-    pool = lines_for(reaction["line"]) * 2 + LINES[kind]
-    line = pick(pool, seed).format(them=buddy["name"], where=where, user=user_name(),
-                                   snippet=_snippet(reaction["line"]))
-    return pick(emotes, seed), line
+def recall(s: dict, name: str, now: float) -> str:
+    """His recent lines, so running jokes and grudges carry over between turns."""
+    lines = []
+    for m in state.memories(s, name)[-RECALL:]:
+        when = _ago(now - m["ts"])
+        if m.get("heard"):
+            lines.append(f'  {when}, {m["from"]} to you: "{m["heard"]}" / you: "{m["said"]}"')
+        elif m.get("they_said"):
+            lines.append(f'  {when}, you to {m["to"]}: "{m["said"]}" / {m["to"]}: '
+                         f'"{m["they_said"]}" / you: "{m.get("then", "")}"')
+        else:
+            lines.append(f'  {when}, you: "{m["said"]}"')
+    if not lines:
+        return ""
+    return (f"What {name} said lately (remember it: keep running jokes and grudges going, "
+            f"call back to them, never repeat a line):\n" + "\n".join(lines))
 
 
 def context_for_claude(owner: str) -> str:
@@ -145,11 +142,14 @@ def context_for_claude(owner: str) -> str:
     me = VARIANTS[name]
     lines = [f"[kuf-buddy] This turn you voice {name} ('{me['meaning']}'): {me['trait']}. "
              f"Talk mostly to the user ({user_name()}). When you jab a neighbor (to=<name>), also "
-             f"write their `reply` in THEIR voice and optionally your `last_word`. Prefer "
-             f"neighbors that are on screen."]
+             f"write their `reply` in THEIR voice AND your `last_word` (both required). Prefer "
+             f"neighbors that are on screen.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
+    memory = recall(s, name, time.time())
+    if memory:
+        lines.append(memory)
     others = state.neighbors(s, owner)
     if not others:
-        return lines[0]
+        return "\n".join(lines)
     labels = describe_neighbors(owner, list(others))
     now = time.time()
     for other, buddy in others.items():

@@ -8,18 +8,20 @@ from pathlib import Path
 
 import pytest
 
-from kuf import cli, events, owner, render, state
+from kuf import cli, events, facts, owner, render, state
 from kuf.emotes import EMOTES, IDLE_BY_MOOD
-from kuf.mcp_server import serve
+from kuf.mcp_server import TOOLS, serve
 
 ROOT = Path(__file__).resolve().parent.parent
 ANSI = re.compile(r"\033\[[0-9;]*m")
+REAL_COLLECT = facts.collect
 
 
 @pytest.fixture(autouse=True)
 def kuf_home(tmp_path, monkeypatch):
     monkeypatch.setenv("KUF_HOME", str(tmp_path / "kuf"))
     monkeypatch.delenv("NIRI_SOCKET", raising=False)   # never talk to the real compositor
+    monkeypatch.setattr(facts, "collect", lambda: {})  # nor to playerctl
     use_owner(monkeypatch, "term-a")
     return tmp_path
 
@@ -244,20 +246,14 @@ def test_direction_from_niri_layout(theirs, expected):
     assert screen.direction(win(1, 2, 2), theirs) == expected
 
 
-def test_neighbor_line_gets_an_instant_retort(monkeypatch):
+def test_neighbor_lines_get_no_canned_answer(monkeypatch):
     monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the right (api)" for o in others})
-    monkeypatch.setattr(banter, "RETORT_ODDS", 1)
-    monkeypatch.setattr(cli, "gossip_line", lambda *a: None)
     b_name = state.register("term-b")
     a_name = state.register("term-a")
-    state.set_reaction("term-b", "flex", "my tests are green, loser", source="claude")
-
-    emote, line, *_ = cli.current_view(state.load(), "term-a", a_name, time.time())
-    assert b_name in line and emote in banter.RETORT_EMOTES
-
     state.set_reaction("term-b", "roast", "yo, your code sucks", source="claude", to=a_name)
-    emote, line, *_ = cli.current_view(state.load(), "term-a", a_name, time.time())
-    assert emote in banter.COMEBACK_EMOTES
+
+    view = cli.current_view(state.load(), "term-a", a_name, time.time())
+    assert view.toward is None and b_name not in view.line
 
 
 def test_claude_gets_told_who_it_voices_and_who_said_what(monkeypatch):
@@ -277,66 +273,9 @@ def test_prompt_hook_emits_additional_context():
     assert "[kuf-buddy]" in ctx
 
 
-def test_unaddressed_neighbor_lines_are_only_answered_sometimes():
-    lines = [{"ts": 1000 + i / 1000, "line": "x", "to": ""} for i in range(300)]
-    answered = sum(banter.should_retort("Leş", r) for r in lines)
-    assert 0 < answered < 300
-    assert banter.should_retort("Leş", {"ts": 1.0, "line": "x", "to": "leş"})
+# ── config ─────────────────────────────────────────────────────────────────────
 
-
-# ── gossip ─────────────────────────────────────────────────────────────────────
-
-from kuf import config, facts, gossip  # noqa: E402
-
-
-@pytest.fixture
-def two_goblins(monkeypatch):
-    monkeypatch.setattr(facts, "collect", lambda: {"temp": 91, "hour": 14, "song": "Gece"})
-    state.register("term-a")
-    state.register("term-b")
-    return state.load()
-
-
-def conversation(s, user="ege"):
-    """Every line spoken in one gossip slot, in order, with the speaker."""
-    start = 100 * gossip.GOSSIP_EVERY + gossip.START_OFFSET
-    said = []
-    for i in range(6):
-        t = start + i * gossip.LINE_S + 1
-        for who in ("term-a", "term-b"):
-            hit = gossip.current_line(state.load(), who, user, t)
-            if hit:
-                said.append((who, hit[1]))
-    return said
-
-
-def test_gossip_alternates_between_two_goblins_and_uses_facts(two_goblins):
-    said = conversation(two_goblins)
-    assert len(said) >= 2
-    assert {who for who, _ in said} == {"term-a", "term-b"}
-    assert all(said[i][0] != said[i + 1][0] for i in range(len(said) - 1))
-    assert not any("{" in line for _, line in said)
-
-
-def test_gossip_is_quiet_outside_the_window_and_with_one_goblin(two_goblins):
-    before = 100 * gossip.GOSSIP_EVERY + gossip.START_OFFSET - 5
-    assert gossip.current_line(state.load(), "term-a", "ege", before) is None
-    alone = {**state.load(), "buddies": {"term-a": {"name": "Küf", "since": 0}}}
-    assert gossip.current_line(alone, "term-a", "ege", before + 10) is None
-
-
-def test_every_script_formats_with_full_facts():
-    full = {"battery": 10, "charging": False, "temp": 90, "song": "s", "apps": ["steam", "discord"],
-            "hour": 3, "weekday": "Sunday", "uptime": "3 days", "ram": 80,
-            "a_proj": "x", "b_proj": "y", "last_file": "main.rs", "user": "ege", "a": "Küf", "b": "Pas"}
-    for _, lines in gossip.SCRIPTS:
-        for _, emote, template in lines:
-            assert emote in EMOTES
-            template.format(**full)
-
-
-def test_facts_collect_never_raises():
-    assert isinstance(facts.collect(), dict)
+from kuf import config  # noqa: E402
 
 
 def test_goblins_call_the_user_by_configured_name():
@@ -358,11 +297,7 @@ def test_idle_goblins_dont_all_say_the_same_thing():
 
 # ── written exchanges ──────────────────────────────────────────────────────────
 
-from kuf import retorts  # noqa: E402
-
-
 def test_jab_with_reply_plays_out_across_both_terminals(monkeypatch):
-    monkeypatch.setattr(cli, "gossip_line", lambda *a: None)
     a_name, b_name = state.register("term-a"), state.register("term-b")
     call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
         "name": "kuf_react", "arguments": {
@@ -384,30 +319,30 @@ def test_jab_with_reply_plays_out_across_both_terminals(monkeypatch):
     reply_at, last_at = banter.reply_delay(reaction), banter.last_word_delay(reaction)
     assert shown("term-b", b_name, reply_at + 0.1) == "fake? at least i HAVE tests"
     assert shown("term-a", a_name, last_at - 0.1) == f"yo {b_name}, your tests are fake"
-    assert shown("term-a", a_name, last_at + 0.1) == "one test. it asserts True."
+    # the last word stacks under the jab instead of replacing it
+    assert shown("term-a", a_name, last_at + 0.1) == f"yo {b_name}, your tests are fake\none test. it asserts True."
+    end = banter.exchange_end(reaction)
+    assert shown("term-b", b_name, end - 0.1) == "fake? at least i HAVE tests"
+    # ...and both sides close together
+    assert "fake" not in shown("term-a", a_name, end + 0.1)
+    assert "HAVE tests" not in shown("term-b", b_name, end + 0.1)
 
 
-def test_malformed_reply_is_dropped_but_jab_still_lands():
-    mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
-        "name": "kuf_react", "arguments": {"emote": "roast", "line": "hey", "to": "Pas",
-                                           "reply": {"emote": "twerk", "line": "x"}}}})
-    reaction = state.load()["reactions"]["term-a"]
-    assert reaction["line"] == "hey" and reaction["reply"] is None
-
-
-@pytest.mark.parametrize("line,topic", [
-    ("my tests are green, loser", "tests"), ("laptop at 94°C lol", "heat"),
-    ("you smell like mold", "smell"), ("it's all in the notebook", "snitch"),
-    ("that crash was yours", "fail"), ("hello there", None),
+@pytest.mark.parametrize("extra", [
+    {},                                                               # no reply, no last word
+    {"reply": {"emote": "rage", "line": "what"}},                     # last word missing
+    {"reply": {"emote": "twerk", "line": "x"}, "last_word": {"emote": "laugh", "line": "ha"}},
 ])
-def test_canned_retorts_follow_the_topic(line, topic):
-    assert retorts.topic_of(line) == topic
+def test_jab_without_reply_and_last_word_is_rejected(extra):
+    out = mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "kuf_react", "arguments": {"emote": "roast", "line": "hey", "to": "Pas", **extra}}})
+    assert out[0]["result"]["isError"]
+    assert "term-a" not in state.load()["reactions"]
 
 
-def test_every_topic_retort_formats():
-    for _, lines in retorts.TOPICS.values():
-        for line in lines:
-            line.format(them="Pas", where="on the right (api)", user="ege", snippet="x")
+def test_last_word_is_required_by_the_schema():
+    schema = next(t for t in TOOLS if t["name"] == "kuf_react")["inputSchema"]
+    assert schema["dependentRequired"]["to"] == ["reply", "last_word"]
 
 
 def test_session_start_registers_and_greets_the_user():
@@ -441,31 +376,12 @@ def test_visible_windows_grow_from_the_active_column_until_the_monitor_is_full()
     assert screen.visible_window_ids(windows, workspaces, outputs) == {3, 4}
 
 
-def test_gossip_prefers_the_two_goblins_on_screen():
-    owners = ["a", "b", "c"]
-    for slot in range(50):
-        assert sorted(gossip.choose_pair(slot, owners, {"b", "c"})) == ["b", "c"]
-    pairs = {tuple(sorted(gossip.choose_pair(slot, owners, None))) for slot in range(50)}
-    assert len(pairs) > 1                     # can't tell who's visible: anyone may talk
-
-
-def test_off_screen_neighbors_get_no_canned_retort_unless_they_call_you_out(monkeypatch):
-    monkeypatch.setattr(banter, "visible_owners", lambda owners: {"term-a"})
-    me = state.register("term-a")
-    state.register("term-b")
-    state.set_reaction("term-b", "roast", "lol", source="claude")
-    now = time.time()
-    assert banter.fresh_neighbor(state.load(), "term-a", 0, now, me) is None
-    state.set_reaction("term-b", "roast", "lol", source="claude", to=me)
-    assert banter.fresh_neighbor(state.load(), "term-a", 0, time.time(), me) is not None
-
-
 def test_exchange_pace_follows_line_length():
     short = {"line": "your tests are fake", "reply": {"line": "nah"}}
     long_ = {"line": " ".join(["word"] * 18), "reply": {"line": " ".join(["word"] * 40)}}
     assert banter.reply_delay(short) == banter.REPLY_DELAY_MIN_S
     assert banter.reply_delay(short) < banter.reply_delay(long_) <= banter.REPLY_DELAY_MAX_S
-    assert banter.last_word_delay(short) < 5
+    assert banter.last_word_delay(short) < 8
     assert banter.last_word_delay(long_) == banter.LAST_WORD_DELAY_MAX_S
 
 
@@ -497,7 +413,6 @@ def test_mirror_flips_direction_and_keeps_rows_aligned():
 
 
 def test_goblin_faces_the_neighbor_he_talks_to_and_looks_ahead_otherwise(monkeypatch):
-    monkeypatch.setattr(cli, "gossip_line", lambda *a: None)
     a_name, b_name = state.register("term-a"), state.register("term-b")
     state.set_reaction("term-b", "roast", "hey", source="cli", to=a_name,
                        reply={"emote": "rage", "line": "what"})
@@ -516,3 +431,136 @@ def test_left_facing_layout_puts_bubble_first_with_tail_toward_him():
 def test_idle_life_emotes_are_looping_animations(name):
     assert len(EMOTES[name]["frames"]) >= 4
     assert name in IDLE_BY_MOOD["comfy"]
+
+
+# ── what the user is up to ─────────────────────────────────────────────────────
+
+def test_facts_collect_never_raises():
+    assert isinstance(REAL_COLLECT(), dict)
+
+
+@pytest.mark.parametrize("title,chat", [
+    ("@Piroz - Discord", "@Piroz"), ("🎮 ODA-1 | KAINAT - Discord", "KAINAT"),
+    ("Friends - Discord", None), ("Discord", None), ("some browser tab", None),
+])
+def test_discord_title_names_the_chat(title, chat):
+    assert facts.discord_chat(title) == chat
+
+
+def test_describe_mentions_song_and_discord():
+    line = facts.describe({"song": "Ezhel - Felaket", "discord_chat": "@Piroz", "hour": 3,
+                           "weekday": "Tuesday", "apps": ["steam"]})
+    assert "listening to Ezhel - Felaket" in line and "with @Piroz" in line
+    assert "steam" in line and "03:00" in line
+    assert "the KAINAT discord server" in facts.describe({"discord_chat": "KAINAT"})
+
+
+def test_three_turns_in_four_are_about_the_users_life():
+    rolls = [i / 100 for i in range(100)]
+    about_life = sum("up to right now" in banter.topic_note("listening to x", r) for r in rolls)
+    assert about_life == 75
+    assert "conversation or the code" in banter.topic_note("", 0.0)   # nothing known: fall back
+
+
+def test_context_carries_the_topic_for_this_turn(monkeypatch):
+    monkeypatch.setattr(facts, "collect", lambda: {"song": "Ezhel - Felaket"})
+    monkeypatch.setattr(banter.random, "random", lambda: 0.1)
+    assert "THIS TURN: talk about what" in banter.context_for_claude("term-a")
+    assert "Ezhel - Felaket" in banter.context_for_claude("term-a")
+
+
+# ── unique names & memory ─────────────────────────────────────────────────────
+
+def test_duplicate_names_are_given_to_free_goblins(monkeypatch):
+    monkeypatch.setattr(state, "is_alive", lambda owner: True)
+    dupes = {"old": {"name": "Kir", "since": 1.0}, "new": {"name": "Kir", "since": 2.0}}
+    state.update(lambda s: {**s, "buddies": dupes})
+    buddies_now = state.load()["buddies"]
+    assert buddies_now["old"]["name"] == "Kir"
+    assert buddies_now["new"]["name"] not in ("Kir",) and buddies_now["new"]["name"] in buddies.VARIANTS
+
+
+def test_both_goblins_remember_a_written_exchange():
+    a_name, b_name = state.register("term-a"), state.register("term-b")
+    mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "kuf_react", "arguments": {
+            "emote": "roast", "line": "your tests are fake", "to": b_name.lower(),
+            "reply": {"emote": "rage", "line": "at least i HAVE tests"},
+            "last_word": {"emote": "laugh", "line": "one test. asserts True."}}}})
+    s = state.load()
+    mine, theirs = state.memories(s, a_name)[-1], state.memories(s, b_name)[-1]
+    assert mine["said"] == "your tests are fake" and mine["then"] == "one test. asserts True."
+    assert theirs["heard"] == "your tests are fake" and theirs["from"] == a_name
+
+    note = banter.context_for_claude("term-b")
+    assert "your tests are fake" in note and "at least i HAVE tests" in note
+
+
+def test_memory_is_capped_and_outlives_the_terminal():
+    name = state.register("term-a")
+    for i in range(state.MEMORY_LINES + 5):
+        mcp({"jsonrpc": "2.0", "id": i, "method": "tools/call", "params": {
+            "name": "kuf_react", "arguments": {"emote": "sus", "line": f"line {i}"}}})
+    history = state.memories(state.load(), name)
+    assert len(history) == state.MEMORY_LINES and history[-1]["said"] == f"line {state.MEMORY_LINES + 4}"
+    state.update(lambda s: {**s, "buddies": {}})
+    assert state.memories(state.load(), name)
+
+
+# ── idle lines about the user's life ───────────────────────────────────────────
+
+from kuf import life  # noqa: E402
+
+FULL_FACTS = {"song": "Yaşlı Amca - Kimsesiz", "discord_chat": "KAINAT", "youtube": "lofi",
+              "whatsapp_unread": 17, "sites": ["github", "sim companies", "whatsapp"],
+              "apps": ["steam", "discord"]}
+
+
+def test_every_life_line_formats():
+    fields = {"user": "ege", "song": "s", "server": "K", "dm": "@p", "video": "v", "unread": 3}
+    for lines in life.LIFE.values():
+        for line in lines:
+            assert "{" not in line.format(**fields)
+
+
+def test_three_idle_lines_in_four_are_about_the_users_life():
+    said = [life.life_line(FULL_FACTS, str(slot), "ege") for slot in range(2000)]
+    share = sum(line is not None for line in said) / len(said)
+    assert 0.7 < share < 0.8
+    assert life.life_line({}, "1", "ege") is None
+
+
+def test_idle_pool_has_fifty_lines_and_no_heat_talk():
+    idle = events.LINES["idle"]
+    assert len(idle) == len(set(idle)) == 50
+    every = " ".join(line for lines in events.LINES.values() for line in lines).lower()
+    assert not any(word in every for word in ("melt", "cooling", "°c"))
+
+
+@pytest.mark.parametrize("title,info", [
+    ("(3) Lofi beats - YouTube - Brave", {"youtube": "Lofi beats"}),
+    ("(17) WhatsApp - Brave", {"site": "whatsapp", "whatsapp_unread": 17}),
+    ("Benzin istasyonu - Sim Companies - Brave", {"site": "sim companies"}),
+    ("Auth-ism/niri-setup: niri desktop - Brave", {"site": "github"}),
+    ("My bank account - Brave", {}),
+])
+def test_only_known_sites_are_read_from_tabs(title, info):
+    assert facts.site_of(title) == info
+
+
+def test_facts_are_cached_between_status_line_runs(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(facts, "collect", lambda: calls.append(1) or {"song": "x"})
+    path = tmp_path / "facts.json"
+    assert facts.cached(path, now=100.0) == {"song": "x"}
+    assert facts.cached(path, now=100.0 + facts.CACHE_S - 1) == {"song": "x"}
+    assert len(calls) == 1
+    facts.cached(path, now=100.0 + facts.CACHE_S + 1)
+    assert len(calls) == 2
+
+
+def test_idle_line_changes_about_every_20_seconds(monkeypatch):
+    monkeypatch.setattr(facts, "collect", lambda: FULL_FACTS)
+    name = state.register("term-a")
+    lines = {cli.current_view(state.load(), "term-a", name, 1_790_000_000.0 + t)[1] for t in range(0, 200, 20)}
+    assert len(lines) > 3

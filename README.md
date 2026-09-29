@@ -28,7 +28,7 @@ He naps on a stained couch until something happens. Then he roasts your code, lo
 | Piece | What it does |
 |---|---|
 | **MCP server** (`kuf`) | Gives Claude a `kuf_react(emote, line)` tool plus Küf's persona. Near the end of each turn, Claude voices Küf with a line about what actually happened. Claude's own replies stay normal. |
-| **Hooks** | Watch file edits, prompt edits (`CLAUDE.md`, rules, skills…), failed commands and passing tests. If Claude forgets to react, a Stop hook picks a canned line so he's never silent. |
+| **Hooks** | Watch file edits, prompt edits (`CLAUDE.md`, rules, skills…), failed commands and passing tests. If Claude forgets to react, a Stop hook picks a canned solo line so he's never silent. Idle, night and greeting lines are canned too. |
 | **Status line** | Draws Küf with 2-frame animation (it refreshes every second) and a speech bubble. His mood (comfy, sleepy, grumpy, furious) drifts with what's been going on. |
 
 It needs only standard-library Python 3.10+. No dependencies, no API keys.
@@ -44,6 +44,11 @@ Every open Claude Code terminal gets its own goblin, each with its own mood, mem
 | **Leş** | carcass | dead-inside nihilist |
 | **Sümük** | snot | petty snitch, keeps score |
 | **Kir** | grime | smug know-it-all, drops tricks |
+| **Çamur** | mud | spaced-out stoner philosopher |
+| **Balgam** | phlegm | cranky old boomer, hates new tech |
+| **Bit** | louse | paranoid conspiracy nut |
+| **Leke** | stain | dramatic diva, everything is a tragedy |
+| **Kabuk** | scab | sleazy hustler, sells you crypto |
 
 Split your screen and they trash-talk each other:
 
@@ -54,24 +59,20 @@ Split your screen and they trash-talk each other:
 ▀█▀▀▀▀▀▀█▀    ╰──────────────────────────────────────────────────────────╯
 ```
 
-- **Written exchanges.** When Claude jabs a neighbor (`kuf_react(to=...)`), it also writes the neighbor's `reply` in *their* temperament, plus an optional `last_word`. The exchange then plays out across the two terminals:
+- **Written exchanges.** When Claude jabs a neighbor (`kuf_react(to=...)`), it also writes the neighbor's `reply` in *their* temperament, plus its own `last_word`. Both are required: a jab without them is rejected, and Claude has to try again. The exchange then plays out across the two terminals:
   ```
   left,  0s:   yo Pas, your tests are fake
-  right, 2s:   fake? at least i HAVE tests           ← Pas answers in his own terminal
-  left,  4.5s: one test. it asserts True.            ← last word
+  right, 5s:   fake? at least i HAVE tests           ← Pas answers in his own terminal
+  left,  11s:  one test. it asserts True.            ← last word
   ```
-  The pacing follows reading time: each line waits about 1 s plus 1 s for every 4 words. The reply lands after 2–6 s, and the last word within 12 s. Tune it with `kuf config words_per_sec <n>`.
+  Nothing gets replaced mid-exchange: the last word stacks under the jab (split by a thin divider), and both terminals close together once the exchange has been up for a minute. The pacing follows reading time: each line waits about 2 s plus 1 s for every 2 words. The reply lands after 4–14 s, and the last word within 28 s. Tune it with `kuf config words_per_sec <n>`.
   Each turn, Claude is told which goblin it voices and the neighbors' names, temperaments, positions and recent lines, in a few lines of context.
-- **Instant canned retorts.** If nobody wrote a reply, the neighbor answers from a canned pool within a second. The pool is picked by topic (tests, failures, heat, laziness, code, music, smell, snitching, praise), so the answer fits what was said. A goblin called out by name always answers, and harder. Other lines get an answer about one time in three.
-- **They mostly talk to you.** They address you by name and only clap back at each other when someone calls them out, or roughly one time in three. Set your name with `kuf config name <name>` (the default is "boss").
-- **They gossip about you.** Every 4 minutes, two goblins have a short chat in their status lines, one line at a time. They talk about your battery and CPU temperature, the song playing, the apps you have open (Steam during "work hours"…), the time, uptime, RAM, and the files you've been touching:
-  ```
-   Kir [puke]: laptop's at 94°C. i could fry an egg on this couch
-   Leş [roast]: that's not an egg Kir, that's your face melting
-   Kir [rage]: boss needs a cooling pad or a priest
-  ```
-  All of this data is read locally: `/sys`, `/proc`, `playerctl`, and app names from niri (never window titles). Nothing leaves your machine.
-- **They stick to what you can see.** On niri, gossip pairs are picked from the terminals that are actually on screen, and canned retorts ignore goblins that are scrolled out of view unless those goblins called them out by name. Claude is told which neighbors are off screen too. niri doesn't report the scroll position, so "on screen" is estimated: start from the focused column and add neighboring columns while they still fit in the monitor's width.
+- **They mostly talk to you.** They address you by name and only clap back at each other when someone calls them out, or roughly one time in four. Talk between goblins is never canned: every jab, reply and last word is written by Claude. Set your name with `kuf config name <name>` (the default is "boss").
+- **Idle chatter about your life.** When nobody's talking, each goblin says something new about every 20 seconds. Three lines in four are about what you're doing right now: the Spotify song, the Discord server (or DM) you have open, the YouTube video, unread WhatsApp messages, GitHub or Sim Companies tabs, Steam being open. The rest come from a pool of 50 couch lines. From browser tabs only a few known sites are recognized (YouTube, WhatsApp, GitHub, Sim Companies, Reddit, Twitch, Gmail, ChatGPT); other tab titles are never read. Facts are cached for 15 s, so the status line doesn't call `playerctl` and niri every second.
+- **They remember.** Each goblin keeps its last 12 lines by name (jabs, replies it got, its last words, and what others said to it), even after its terminal closes. Every turn Claude is reminded of the last 6, so running jokes and grudges carry over and lines aren't repeated.
+- **Every terminal gets its own name.** If two live terminals end up with the same goblin, the newer one is given a free one. There are 10 goblins.
+- **They talk about your life.** Each turn the hook tells Claude what you're up to: the song playing (`playerctl`), who you're talking to on Discord (from its window title, e.g. `@Piroz - Discord`), the apps you have open (Steam during "work hours"…), the time, RAM and uptime. It also rolls this turn's topic: 3 turns out of 4 the goblin talks about that, and the rest of the time about the conversation or the code. These facts go into Claude's context, so they leave your machine with the prompt.
+- **They stick to what you can see.** On niri, Claude is told which neighbors are on screen and which are scrolled out of view. niri doesn't report the scroll position, so "on screen" is estimated: start from the focused column and add neighboring columns while they still fit in the monitor's width.
 - **They know where they sit.** On [niri](https://github.com/YaLTeR/niri), goblins find each other's windows and say "on the right", "right above you" or "way off to the left". Everywhere else, they use the project name.
 
 ### Life on the couch
@@ -87,7 +88,7 @@ He actually sits on a couch now, armrests and all. When nobody is talking to him
 
 The loops are sipping tea (the steam moves), napping stretched along the couch (the zZ rises), gaming, doomscrolling, yawning and stretching, and picking his nose.
 
-When he talks to a neighbor (written replies, last words, retorts or gossip), he turns to face that terminal. A goblin whose neighbor is on the left is mirrored, and his bubble moves to his mouth side.
+When he talks to a neighbor (written replies and last words), he turns to face that terminal. A goblin whose neighbor is on the left is mirrored, and his bubble moves to his mouth side.
 
 ### Emotes
 
@@ -124,7 +125,7 @@ kuf install-statusline | uninstall-statusline
 
 ## Personality
 
-Küf swears a lot, talks like your street bro and trash-talks your *code* (and Claude). He's loyal to you. He's crude, but he never uses slurs or bigoted jokes. To make him your own, edit `kuf/events.py` (canned lines) or the `PERSONA` text in `kuf/mcp_server.py`.
+Küf swears a lot, talks like your street bro and trash-talks your *code* (and Claude). He's loyal to you. He's crude, but he never uses slurs or bigoted jokes. To make him your own, edit `kuf/events.py` (canned solo lines) or the `PERSONA` text in `kuf/mcp_server.py`.
 
 ## Uninstall
 

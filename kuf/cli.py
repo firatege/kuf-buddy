@@ -9,20 +9,18 @@ import zlib
 from pathlib import Path
 from typing import NamedTuple
 
-from . import state
-from .banter import (context_for_claude, fresh_neighbor, incoming_reply, last_word, retort,
-                     should_retort)
+from . import facts, state
+from .banter import context_for_claude, exchange_over, incoming_reply, last_word
 from .config import set_value, user_name
-from .gossip import current_line as gossip_line
 from .emotes import EMOTES, IDLE_BY_MOOD
 from .events import TEST_CMD, canned, classify, edit_count, mood, pick, turn_fallback
+from .life import life_line
 from .owner import owner_id
 from .render import compose
 from .screen import side_of
 
 REACTION_TTL_S = 150
-IDLE_SWAP_S = 600
-JUST_SPOKE_S = 20   # his own fresh line beats answering the neighbors
+IDLE_SWAP_S = 20    # a new idle line about every 20 s
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 BIN = Path(__file__).resolve().parent.parent / "bin" / "kuf"
 LEGACY_MARKER = "/pet/kuf.py"
@@ -67,20 +65,14 @@ def current_view(s: dict, owner: str, name: str, now: float) -> View:
     reply = incoming_reply(s, owner, name, now)
     if reply:
         return View(reply[0], reply[1], toward=reply[2])
-    if age < JUST_SPOKE_S and reaction["emote"] in EMOTES:
-        return View(reaction["emote"], reaction["line"], toward=target)
-    chat = gossip_line(s, owner, user_name(), now)
-    if chat:
-        return View(chat[0], chat[1], toward=chat[2])
-    hit = fresh_neighbor(s, owner, reaction["ts"] if reaction else 0.0, now, name)
-    if hit and should_retort(name, hit[2]):
-        return View(*retort(name, hit[0], hit[1], hit[2], owner), toward=hit[0])
-    if age < REACTION_TTL_S and reaction["emote"] in EMOTES:
+    if age < REACTION_TTL_S and reaction["emote"] in EMOTES and not exchange_over(reaction, now):
         return View(reaction["emote"], reaction["line"], toward=target)
     # Seed with the goblin's name and stagger the switch so terminals don't chant in sync.
     offset = zlib.crc32(name.encode()) % IDLE_SWAP_S
     slot = f"{int((now + offset) // IDLE_SWAP_S)}:{name}"
-    return View(pick(IDLE_BY_MOOD[feeling], slot), canned(kind, trigger, edits, slot), feeling)
+    about_life = life_line(facts.cached(state.state_dir() / "facts.json"), slot, user_name())
+    return View(pick(IDLE_BY_MOOD[feeling], slot),
+                about_life or canned(kind, trigger, edits, slot), feeling)
 
 
 def cmd_status() -> None:
@@ -227,7 +219,7 @@ USAGE = """usage: kuf <command>
   preview [emote|--all]  show emotes in your terminal
   say <emote> <line...>  make your goblin say something right now
   config name <name>     what the goblins call you (default: boss)
-  config words_per_sec <n>  reading speed that paces written exchanges (default: 4)
+  config words_per_sec <n>  reading speed that paces written exchanges (default: 2)
   install-statusline     put Küf in ~/.claude/settings.json (backs it up first)
   uninstall-statusline"""
 

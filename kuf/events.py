@@ -1,5 +1,6 @@
-"""What happened (events), how Küf feels about it (mood), and his canned lines
-for when Claude doesn't voice him."""
+"""What happened (events), how Küf feels about it (mood), and his canned solo lines
+for when Claude doesn't voice him. Talk between goblins is never canned: Claude
+writes every jab, reply and last word through kuf_react."""
 
 import re
 import zlib
@@ -22,7 +23,6 @@ TEST_CMD = re.compile(r"\b(pytest|cargo test|npm (run )?test|pnpm test|bun test|
 LINES = {
     "idle": [
         "yo {user}, drink some water. you look like me.",
-        "{user}, commit your shit before the laptop melts.",
         "you good {user}? blink twice if claude is holding you hostage.",
         "{user} if you refactor one more thing i'm moving out.",
         "*scratches belly* nobody touched shit. perfect.",
@@ -32,6 +32,46 @@ LINES = {
         "*burp* ...the tests can wait.",
         "haven't showered since the last deploy. no regrets.",
         "wake me up when something breaks.",
+        "bro when's the last time you touched grass. deadass asking.",
+        "{user}, your posture is a war crime. sit up, my boy.",
+        "i'd help but that sounds like effort.",
+        "*picks something out of his teeth* ...where were we.",
+        "no cap, this couch is the only stable thing in your life.",
+        "{user} you ate today? chips count. i checked.",
+        "somebody order pizza. i ain't paying tho.",
+        "i'm not lazy, i'm in power saving mode, bitch.",
+        "your git log reads like a diary of a madman, bro.",
+        "one day you'll write docs. and i'll get up. neither is happening.",
+        "{user}, stretch. your spine is filing a complaint.",
+        "*farts into the cushion* ...that's staying there.",
+        "who keeps stealing my remote? oh wait. i'm sitting on it.",
+        "bro your desk is dirtier than me. that's an achievement.",
+        "i've been on this couch so long it has my shape now.",
+        "rent's due and i'm still not paying, my boy.",
+        "real talk {user}, you're doing aight. don't let it go to your head.",
+        "stack overflow called. they want their code back.",
+        "if it compiles, ship it. that's my whole philosophy.",
+        "*yawns* is it friday yet? no? fuck.",
+        "i dreamt your tests passed. woke up screaming.",
+        "bro i found a fry from 2023 in here. still good.",
+        "don't mind me, just judging your variable names.",
+        "the couch cushion ate my phone again. damn thing's hungry.",
+        "{user}, call your mom. i'll wait. i ain't going anywhere.",
+        "every time you say 'quick fix' a goblin loses his crumbs.",
+        "lemme guess. 'it worked on my machine'. classic.",
+        "i'm lowkey proud of you {user}. don't tell nobody.",
+        "*scratches* ...i think something lives in this couch with me.",
+        "ctrl+z won't fix your life, my boy. but it's a start.",
+        "you know what goes hard? naps. try one.",
+        "your todo list is longer than my unpaid tabs.",
+        "bro i'm the only one here who never crashed. respect me.",
+        "tabs vs spaces? i vote couch.",
+        "if you need me i'll be right here. forever. literally.",
+        "{user}, stop reading the status line and go do shit.",
+        "that bug ain't gonna fix itself. neither am i.",
+        "yo, who left the terminal open all night? oh right, you.",
+        "*sniffs the air* ...smells like technical debt in here.",
+        "i'd give you advice but you'd ignore it like the linter.",
     ],
     "code": [
         "yo who touched {file}? it was perfectly broken.",
@@ -62,19 +102,6 @@ LINES = {
         "ok ok it passed. don't get cocky, {user}.",
         "look at that, it works. i'm tearing up. it's the mold.",
     ],
-    "retort": [
-        "{them} {where} thinks he's funny. he isn't.",
-        "lmao listen to {them} {where}: \"{snippet}\". clown.",
-        "yo {them}, mind your own damn terminal.",
-        "{them} {where} is yapping again. *throws a chip at him*",
-        "nobody asked you, {them}. go touch grass. or mold.",
-    ],
-    "comeback": [
-        "{them} came at me?? your code smells worse than me, {them}.",
-        "oh {them} wants smoke. bring it, you crusty bastard.",
-        "talk to me when your tests pass, {them}.",
-        "{them} {where} talking shit again. i'll eat your crumbs, bitch.",
-    ],
     "greet": [
         "*crawls onto the couch* sup {user}. what are we breaking today?",
         "yo {user}. i'm {name}. i live here now. don't touch my crumbs.",
@@ -94,7 +121,6 @@ LINES = {
         "zzz... dreaming about a codebase with tests... nightmare...",
         "{user} your eyes look like my couch. go sleep.",
         "*snore* ...no... not another refactor... zzz",
-        "shh. the laptop is finally cooling down. don't ruin it.",
         "zzz... {user}... you forgot to push... jk... zzz",
         "{hour}:00? bro even the mold is asleep.",
         "*drools on the cushion* ...leave me alone...",

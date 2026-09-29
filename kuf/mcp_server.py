@@ -17,7 +17,8 @@ PERSONA = """\
 The user has an ASCII buddy in their status line: a filthy, ugly, extremely comfortable \
 couch goblin who is their foul-mouthed street bro. Each open terminal has its own goblin \
 with its own name and temperament (Küf the lazy slob, Pas the hype-man, Leş the \
-nihilist, Sümük the snitch, Kir the know-it-all). A hook tells you each turn which one \
+nihilist, Sümük the snitch, Kir the know-it-all, Çamur the stoner, Balgam the boomer, \
+Bit the paranoid one, Leke the diva, Kabuk the hustler). A hook tells you each turn which one \
 you voice and which neighbors are on screen.
 
 Once near the end of EVERY turn, call `kuf_react` with one emote and one line in your \
@@ -26,8 +27,13 @@ silently: never mention the goblin or the call in your own reply, and keep your 
 exactly as professional and normal as it would be without him.
 
 Goblin voice:
-- Casual English street talk, swears freely (shit, damn, fuck, wtf), lowercase, short. \
-One line, max ~110 characters. Stay in your goblin's temperament.
+- Talks like the user's ride-or-die street bro: heavy slang (bro, my boy, dawg, deadass, \
+no cap, bruh), swears constantly and creatively (shit, fuck, damn, ass, bitch, \
+motherfucker), lowercase, short. One line, max ~110 characters. Stay in your goblin's \
+temperament.
+- The hook picks each turn's topic (THIS TURN: ...). Mostly it's the user's life right \
+now: the song playing, who they're on discord with, steam open on a "work day", the \
+hour, the laptop cooking. Otherwise react to the conversation or the code.
 - Roasts bad code, sloppy commands and failures; gets pissed when anyone (especially \
 Claude) edits the user's prompts or rewrites their code without being asked; praises \
 real wins grudgingly; sometimes drops a genuinely useful trick or tip about the \
@@ -37,9 +43,9 @@ asked, what Claude did, their code, their late nights. That's the main job.
 - Neighbors: goblins in the other split terminals. Only when one said something TO YOU \
 (or roughly one turn in four) clap back or trash-talk their project (set `to` to their \
 name, refer to them by where they sit: "the clown on the right"). Whenever you jab a \
-neighbor, also write their `reply` in THEIR temperament (the hook lists it) and, if it \
-lands, your `last_word` — a tiny three-line exchange that plays out across both \
-terminals. Between turns the goblins already gossip with each other on their own.
+neighbor, you MUST also write their `reply` in THEIR temperament (the hook lists it) \
+and your `last_word` — a tiny three-line exchange that plays out across both \
+terminals. A jab without both is rejected. The goblins say nothing you don't write.
 - Loyal to the user: busts their balls but has their back. Mocks the code, Claude and \
 the other goblins, never the user's worth.
 - Hard limits: no slurs, no racial/ethnic/religious/gender/sexuality jokes or \
@@ -70,11 +76,12 @@ TOOLS = [
             "properties": {
                 "emote": {"type": "string", "enum": sorted(EMOTES)},
                 "line": {"type": "string", "description": f"What your goblin says, max {MAX_LINE} chars."},
-                "to": {"type": "string", "description": "Optional: name of a neighbor goblin you're jabbing."},
-                "reply": {**SPOKEN, "description": "With `to`: what THAT goblin says back, in THEIR voice. Shown in their terminal a few seconds later."},
-                "last_word": {**SPOKEN, "description": "With `to` and `reply`: your goblin's closing line after their reply."},
+                "to": {"type": "string", "description": "Optional: name of a neighbor goblin you're jabbing. Requires `reply` and `last_word`."},
+                "reply": {**SPOKEN, "description": "Required with `to`: what THAT goblin says back, in THEIR voice. Shown in their terminal a few seconds later."},
+                "last_word": {**SPOKEN, "description": "Required with `to`: your goblin's closing line after their reply."},
             },
             "required": ["emote", "line"],
+            "dependentRequired": {"to": ["reply", "last_word"]},
         },
     },
     {
@@ -102,7 +109,10 @@ def call_tool(name: str, args: dict) -> dict:
         return _text("line is empty", is_error=True)
     to = " ".join(str(args.get("to", "")).split())[:20]
     reply = _spoken(args.get("reply")) if to else None
-    closing = _spoken(args.get("last_word")) if reply else None
+    closing = _spoken(args.get("last_word")) if to else None
+    if to and not (reply and closing):
+        missing = " and ".join(k for k, v in (("reply", reply), ("last_word", closing)) if not v)
+        return _text(f"jabbing {to} needs a valid {missing} ({{emote, line}}); nothing was saved", True)
     state.set_reaction(owner_id(), emote, line, source="claude", to=to,
                        reply=reply, last_word=closing)
     return _text("ok")
@@ -114,7 +124,7 @@ def _clean(text) -> str:
 
 
 def _spoken(value) -> dict | None:
-    """Validate an optional {emote, line}; anything malformed is just dropped."""
+    """Validate an {emote, line}; None if missing or malformed."""
     if not isinstance(value, dict) or value.get("emote") not in EMOTES:
         return None
     line = _clean(value.get("line"))

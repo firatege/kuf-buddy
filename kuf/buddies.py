@@ -29,6 +29,31 @@ VARIANTS: dict[str, dict] = {
         "tint": "\033[38;5;180m",
         "trait": "smug know-it-all; drops tricks constantly, acts like a 10x engineer from his couch",
     },
+    "Çamur": {
+        "meaning": "mud",
+        "tint": "\033[38;5;94m",
+        "trait": "spaced-out stoner philosopher; slow, dreamy, turns every bug into 'bro, what if...'",
+    },
+    "Balgam": {
+        "meaning": "phlegm",
+        "tint": "\033[38;5;143m",
+        "trait": "cranky old boomer; hates new tech, yells 'back in my day', coughs mid-sentence",
+    },
+    "Bit": {
+        "meaning": "louse",
+        "tint": "\033[38;5;139m",
+        "trait": "paranoid conspiracy nut; everything is spying on the boss, trusts no process",
+    },
+    "Leke": {
+        "meaning": "stain",
+        "tint": "\033[38;5;168m",
+        "trait": "dramatic diva; every failure is a tragedy, every win an oscar speech",
+    },
+    "Kabuk": {
+        "meaning": "scab",
+        "tint": "\033[38;5;166m",
+        "trait": "sleazy hustler; tries to sell everything, sees a crypto scheme in every bug",
+    },
 }
 
 

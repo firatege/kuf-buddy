@@ -13,11 +13,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
-from .buddies import assign
+from .buddies import VARIANTS, assign
 from .owner import is_alive
 
 MAX_EVENTS = 200
 STALE_S = 86_400
+MEMORY_LINES = 12      # what each goblin remembers saying, kept across terminals
 
 
 def state_dir() -> Path:
@@ -29,7 +30,7 @@ def state_file() -> Path:
 
 
 def empty_state() -> dict:
-    return {"events": [], "reactions": {}, "turns": {}, "buddies": {}, "gossip": None}
+    return {"events": [], "reactions": {}, "turns": {}, "buddies": {}, "history": {}}
 
 
 def load() -> dict:
@@ -55,7 +56,7 @@ def _locked():
 
 
 def _prune(s: dict, now: float) -> dict:
-    """Forget terminals that closed or went quiet for a day."""
+    """Forget terminals that closed or went quiet for a day. Memories stay."""
     def keep(owner: str, ts: float) -> bool:
         return now - ts < STALE_S and is_alive(owner)
 
@@ -63,9 +64,20 @@ def _prune(s: dict, now: float) -> dict:
         "events": [e for e in s["events"] if keep(e.get("owner", ""), e["ts"])][-MAX_EVENTS:],
         "reactions": {o: r for o, r in s["reactions"].items() if keep(o, r["ts"])},
         "turns": {o: ts for o, ts in s["turns"].items() if keep(o, ts)},
-        "buddies": {o: b for o, b in s["buddies"].items() if is_alive(o)},
-        "gossip": s.get("gossip"),
+        "buddies": _unique({o: b for o, b in s["buddies"].items() if is_alive(o)}),
+        "history": {n: h[-MEMORY_LINES:] for n, h in s["history"].items() if n in VARIANTS},
     }
+
+
+def _unique(buddies: dict) -> dict:
+    """Give a newer terminal a free goblin when its name is already taken."""
+    result: dict = {}
+    for owner, buddy in sorted(buddies.items(), key=lambda kv: kv[1].get("since", 0)):
+        names = {b["name"] for b in result.values()}
+        if buddy["name"] in names and len(names) < len(VARIANTS):
+            buddy = {**buddy, "name": assign(owner, names)}
+        result = {**result, owner: buddy}
+    return result
 
 
 def update(change: Callable[[dict], dict]) -> dict:
@@ -87,7 +99,35 @@ def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
                  reply: dict | None = None, last_word: dict | None = None) -> dict:
     reaction = {"emote": emote, "line": line, "source": source, "to": to,
                 "reply": reply, "last_word": last_word, "ts": time.time()}
-    return update(lambda s: {**s, "reactions": {**s["reactions"], owner: reaction}})
+
+    def change(s: dict) -> dict:
+        updated = {**s, "reactions": {**s["reactions"], owner: reaction}}
+        me = s["buddies"].get(owner, {}).get("name")
+        return remember(updated, me, reaction) if source == "claude" and me else updated
+
+    return update(change)
+
+
+def remember(s: dict, name: str, reaction: dict) -> dict:
+    """Both sides of a written exchange go into the speakers' memories."""
+    ts = reaction["ts"]
+    to = next((v for v in VARIANTS if v.lower() == reaction.get("to", "").lower()),
+              reaction.get("to", ""))
+    memories = {name: {"ts": ts, "said": reaction["line"], "to": to}}
+    if to and reaction.get("reply"):
+        memories = {name: {**memories[name], "they_said": reaction["reply"]["line"],
+                           "then": (reaction.get("last_word") or {}).get("line", "")},
+                    to: {"ts": ts, "heard": reaction["line"], "from": name,
+                         "said": reaction["reply"]["line"]}}
+    history = dict(s["history"])
+    for who, memory in memories.items():
+        if who in VARIANTS:
+            history[who] = (history.get(who, []) + [memory])[-MEMORY_LINES:]
+    return {**s, "history": history}
+
+
+def memories(s: dict, name: str) -> list[dict]:
+    return s["history"].get(name, [])
 
 
 def anchor_exchange(owner: str, reaction_ts: float) -> dict:

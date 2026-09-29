@@ -8,7 +8,7 @@ from .emotes import EMOTES
 
 SPRITE_COLS = 13
 BUBBLE_TEXT_COLS = 56
-BUBBLE_MAX_LINES = 3
+BUBBLE_MAX_LINES = 3   # per paragraph; a stacked exchange has two
 
 RESET, DIM, BOLD = "\033[0m", "\033[2m", "\033[1m"
 MOOD_COLOR = {
@@ -63,16 +63,23 @@ def frame(emote: str, tick: int, facing: str = "right") -> list[str]:
     return mirror(rows) if facing == "left" else rows
 
 
+def _wrap(paragraph: str) -> list[str]:
+    wrapped = textwrap.wrap(paragraph, BUBBLE_TEXT_COLS) or [""]
+    if len(wrapped) <= BUBBLE_MAX_LINES:
+        return wrapped
+    kept = wrapped[:BUBBLE_MAX_LINES]
+    return kept[:-1] + [kept[-1][: BUBBLE_TEXT_COLS - 1] + "…"]
+
+
 def bubble(line: str, name: str = "Küf") -> list[str]:
-    wrapped = textwrap.wrap(line, BUBBLE_TEXT_COLS) or [""]
-    if len(wrapped) > BUBBLE_MAX_LINES:
-        wrapped = wrapped[:BUBBLE_MAX_LINES]
-        wrapped[-1] = wrapped[-1][: BUBBLE_TEXT_COLS - 1] + "…"
-    inner = max(width(w) for w in wrapped)
+    paragraphs = [_wrap(paragraph) for paragraph in line.split("\n")]
+    inner = max(width(row) for rows in paragraphs for row in rows)
     label = f"─ {name} "
     inner = max(inner, width(label) - 2)
     top = f"╭{label}{'─' * (inner + 2 - width(label))}╮"
-    body = [f"│ {pad(w, inner)} │" for w in wrapped]
+    divider = f"├{'┄' * (inner + 2)}┤"
+    body = [row for i, rows in enumerate(paragraphs)
+            for row in ([divider] if i else []) + [f"│ {pad(w, inner)} │" for w in rows]]
     bottom = f"╰{'─' * (inner + 2)}╯"
     return [top, *body, bottom]
 
@@ -95,12 +102,12 @@ def compose(emote: str, line: str, tick: int, mood: str | None = None,
     out = []
     for i, (s, b) in enumerate(zip(sprite, speech)):
         if facing == "left":
-            if i == face_row and b.endswith("│"):
+            if i == face_row and b.endswith(("│", "┤")):
                 b = b[:-1] + ">"   # tail points at his mouth, now on his left
             text = f"{dim}{pad(b, bubble_cols)}{reset} " if b else " " * (bubble_cols + 1)
             out.append(f"{text}{tint}{s}{reset}".rstrip() if color else f"{text}{s}".rstrip())
         else:
-            if i == face_row and b.startswith("│"):
+            if i == face_row and b.startswith(("│", "├")):
                 b = "<" + b[1:]    # the bubble's tail points at his mouth
             left = f"{tint}{pad(s, SPRITE_COLS)}{reset}"
             out.append(f"{left} {dim}{b}{reset}" if b else left)
