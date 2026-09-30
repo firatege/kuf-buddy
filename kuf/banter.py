@@ -3,7 +3,7 @@
 import random
 import time
 
-from . import clock, facts, looks, relations, state
+from . import clock, facts, looks, relations, state, tr
 from .buddies import VARIANTS
 from .config import load as load_config, turkish, user_name
 from .screen import describe_neighbors
@@ -115,8 +115,7 @@ def context_for_claude(owner: str) -> str:
              f"Talk to the user ({user_name()}); neighbors only when told BANTER or JOINT.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
     lines.append(f"Now: {clock.describe(clock.moment())} (let it color the mood, don't announce it).")
     if turkish():
-        lines.append("DİL: goblin satırlarının hepsini (kuf_react line/reply/last_word, kuf_session "
-                     "adımları, joke) Türkçe yaz: sokak ağzı, küfürlü, küçük harf, kısa. Emote adları aynı kalır.")
+        lines.append(tr.STYLE)
     own = looks.signatures(name)
     if own:
         lines.append(f"Your own emotes: {', '.join(own)}.")
