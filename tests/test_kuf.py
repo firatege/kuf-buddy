@@ -1559,3 +1559,24 @@ def test_the_per_turn_context_stays_small(monkeypatch):
 def test_long_commands_are_stored_short():
     state.add_event("term-a", {"kind": "win", "cmd": "pytest " + "x" * 5000})
     assert len(state.load()["events"][-1]["cmd"]) == state.CMD_CAP
+
+
+def test_swapping_goblins_mid_session_drops_the_old_ones_joint(monkeypatch):
+    circle(monkeypatch, "Snoop", "Çamur")
+    session.save_plan("t0", {"kind": "session", "host": "t0", "host_name": "Snoop",
+                             "order": ["Snoop", "Çamur"], "ts": time.time()})
+    session.start("t0", [{"name": "Snoop", "line": "a"}, {"name": "Çamur", "line": "b"}])
+    session.anchor("t0")
+    t0 = state.load()["session"]["anchor"]
+    assert session.view(state.load(), "t0", t0 + 1)
+    state.claim("t0", "Pas")
+    assert session.view(state.load(), "t0", t0 + 1) is None          # Pas isn't smoking Snoop's joint
+    assert session.view(state.load(), "t1", t0 + 1)                   # Çamur's side plays on
+
+
+def test_swapped_goblin_starts_without_the_old_ones_last_line(monkeypatch):
+    monkeypatch.delenv("KUF_GOBLIN", raising=False)
+    state.claim("term-a", "Snoop")
+    state.set_reaction("term-a", "joint", "puff puff", source="claude")
+    state.claim("term-a", "Pas")
+    assert "term-a" not in state.load()["reactions"]

@@ -291,6 +291,10 @@ def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] |
     session = s.get("session")
     if not session or owner not in {step["owner"] for step in session["steps"]}:
         return None
+    # Swapped goblins mid-session (`goblin rnd`): the new one doesn't inherit the old one's joint.
+    mine_now = s["buddies"].get(owner, {}).get("name")
+    if mine_now not in {step["name"] for step in session["steps"] if step["owner"] == owner}:
+        return None
     start_at = _start(session, now)
     if start_at is None or _cut(s, session) or _interrupted(s, session, owner, now):
         return None

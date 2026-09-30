@@ -221,8 +221,11 @@ def claim(owner: str, name: str) -> str:
             if other != owner and buddy["name"] == name:
                 buddies = {**buddies, other: {**buddy, "name": assign(other, taken)}}
                 taken = taken | {buddies[other]["name"]}
-        idle = {o: i for o, i in s["idle"].items() if buddies.get(o, {}).get("name") == s["buddies"].get(o, {}).get("name")}
-        return {**s, "buddies": buddies, "idle": idle}
+        changed = {o for o in buddies if buddies[o].get("name") != s["buddies"].get(o, {}).get("name")}
+        idle = {o: i for o, i in s["idle"].items() if o not in changed}
+        # a swapped-in goblin doesn't wear the old one's last line either
+        reactions = {o: r for o, r in s["reactions"].items() if o not in changed}
+        return {**s, "buddies": buddies, "idle": idle, "reactions": reactions}
 
     buddy = update(change)["buddies"].get(owner)
     return buddy["name"] if buddy else name
