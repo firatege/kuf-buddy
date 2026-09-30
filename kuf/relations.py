@@ -52,7 +52,12 @@ def record(s: dict, names: list[str], kind: str, vibe: str | None, joke: str | N
     delta = VIBES.get(vibe or "", 0)
     for i, a in enumerate(circle):
         for b in circle[i + 1:]:
-            bonus = JOINT_BONUS if kind == "session" else REFUSED if kind == "refused" and host in (a, b) else 0
+            if kind == "session":
+                bonus = JOINT_BONUS
+            elif kind == "refused" and host in (a, b):
+                bonus = REFUSED
+            else:
+                bonus = 0
             s = _bump(s, a, b, delta + bonus, (joke or "").strip()[:80], now, kind == "session")
     return s
 

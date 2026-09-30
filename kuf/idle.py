@@ -7,51 +7,60 @@ runs dry, the line said longest ago wins, so repeats are spread as far apart as 
 """
 
 import zlib
+from typing import Callable
 
 from . import state
+from .events import pick
 
 OWN_COOLDOWN_S = 1800
 SHARED_COOLDOWN_S = 300
-MAX_SAID = state.SAID_CAP   # remembered (template, when) pairs per goblin
 
 
-def _last_said(s: dict, name: str, now: float) -> dict[str, float]:
-    """template -> when it was last said, counting other goblins only while shared-cooling."""
-    last: dict[str, float] = {}
+def key(template: str) -> int:
+    """Templates are remembered by hash; keeps the no-repeat memory small."""
+    return zlib.crc32(template.encode())
+
+
+def _last_said(s: dict, name: str, now: float) -> dict:
+    """template key -> when it was last said, counting other goblins only while shared-cooling."""
+    last: dict = {}
     for who, said in s["said"].items():
         for item in said:
             if who != name and now - item["ts"] >= SHARED_COOLDOWN_S:
                 continue
-            last = {**last, item["t"]: max(item["ts"], last.get(item["t"], 0.0))}
+            last[item["t"]] = max(item["ts"], last.get(item["t"], 0.0))
     return last
 
 
-def choose(candidates: list[tuple[str, str]], last: dict[str, float], now: float,
+def choose(candidates: list[tuple[str, str]], last: dict, now: float,
            seed: str) -> tuple[str, str]:
     """(template, text): a fresh one if any, else the one said longest ago."""
-    fresh = [c for c in candidates if c[0] not in last or now - last[c[0]] >= OWN_COOLDOWN_S]
+    fresh = [c for c in candidates if key(c[0]) not in last or now - last[key(c[0])] >= OWN_COOLDOWN_S]
     if fresh:
-        return fresh[zlib.crc32(seed.encode()) % len(fresh)]
-    return min(candidates, key=lambda c: last[c[0]])
+        return pick(fresh, seed)
+    return min(candidates, key=lambda c: last[key(c[0])])
 
 
 def line_for_slot(owner: str, name: str, slot: str, now: float,
-                  candidates: list[tuple[str, str]]) -> tuple[str, str]:
-    """This slot's (template, line), picked once and remembered."""
-    current = state.load()["idle"].get(owner)
+                  candidates: Callable[[], list[tuple[str, str]]],
+                  s: dict | None = None) -> tuple[str, str]:
+    """This slot's (template, line), picked once and remembered. `candidates` is only
+    called when a new line is needed."""
+    current = (s if s is not None else state.load())["idle"].get(owner)
     if current and current["slot"] == slot:
         return current.get("t", ""), current["line"]
-    if not candidates:
+    pool = candidates()
+    if not pool:
         return "", ""
 
-    def change(s: dict) -> dict:
-        existing = s["idle"].get(owner)
+    def change(cur: dict) -> dict:
+        existing = cur["idle"].get(owner)
         if existing and existing["slot"] == slot:
-            return s
-        template, text = choose(candidates, _last_said(s, name, now), now, slot)
-        said = (s["said"].get(name, []) + [{"t": template, "ts": now}])[-MAX_SAID:]
-        return {**s, "idle": {**s["idle"], owner: {"slot": slot, "t": template, "line": text}},
-                "said": {**s["said"], name: said}}
+            return cur
+        template, text = choose(pool, _last_said(cur, name, now), now, slot)
+        said = cur["said"].get(name, []) + [{"t": key(template), "ts": now}]
+        return {**cur, "idle": {**cur["idle"], owner: {"slot": slot, "t": template, "line": text}},
+                "said": {**cur["said"], name: said}}
 
     picked = state.update(change)["idle"].get(owner, {})
     return picked.get("t", ""), picked.get("line", "")

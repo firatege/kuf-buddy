@@ -4,11 +4,12 @@ speak as the status-line goblins. Standard library only."""
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from difflib import SequenceMatcher
 
 from . import looks, relations, session, state
-from .buddies import VARIANTS
+from .buddies import VARIANTS, resolve
 from .emotes import EMOTES
 from .owner import owner_id
 
@@ -161,12 +162,12 @@ def call_tool(name: str, args: dict) -> dict:
     long = _too_long(line, *(x["line"] for x in (reply, closing) if x))
     if long:
         return _text(long, True)
-    repeat = _repeat_of(line)
+    repeat = _repeat_of(line, me)
     if repeat:
         return _text(f'your goblin already said "{repeat}". write something new; nothing was saved', True)
     state.set_reaction(owner_id(), emote, line, source="claude", to=to,
                        reply=reply, last_word=closing)
-    other = next((v for v in VARIANTS if v.lower() == to.lower()), None) if to else None
+    other = resolve(to) if to else None
     if other and me:
         relations.save([me, other], "banter", _vibe(args.get("vibe")), args.get("joke"))
     return _text("ok")
@@ -198,11 +199,9 @@ def _session(raw, vibe=None, joke=None) -> dict:
     return _text(error, True) if error else _text("ok, it's playing out")
 
 
-def _repeat_of(line: str) -> str | None:
+def _repeat_of(line: str, name: str) -> str | None:
     """A remembered line of this goblin's that `line` basically repeats."""
-    s = state.load()
-    name = s["buddies"].get(owner_id(), {}).get("name")
-    for memory in reversed(state.memories(s, name) if name else []):
+    for memory in reversed(state.memories(state.load(), name) if name else []):
         for said in (memory.get("said", ""), memory.get("then", "")):
             if said and SequenceMatcher(None, said.lower(), line.lower()).ratio() >= REPEAT_RATIO:
                 return said
@@ -256,6 +255,9 @@ PACKAGE = Path(__file__).resolve().parent
 RESUMED = "KUF_MCP_RESUMED"
 
 
+STAMP_EVERY_S = 2.0    # how often to look for new kuf code between messages
+
+
 def code_stamp() -> float:
     """Newest modification time of kuf's own code."""
     try:
@@ -306,7 +308,7 @@ def _incoming(stdin):
 
 
 def serve(stdin=sys.stdin, stdout=sys.stdout, restart=_restart) -> None:
-    started = code_stamp()
+    started, checked = code_stamp(), time.monotonic()
     if os.environ.pop(RESUMED, None):
         # Came back on newer code: the tool list (emotes, tools) may have changed.
         stdout.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}) + "\n")
@@ -314,7 +316,12 @@ def serve(stdin=sys.stdin, stdout=sys.stdout, restart=_restart) -> None:
     for raw in _incoming(stdin):
         if not raw.strip():
             continue
-        if code_stamp() > started:
+        if time.monotonic() - checked >= STAMP_EVERY_S:
+            checked = time.monotonic()
+            updated = code_stamp() > started
+        else:
+            updated = False
+        if updated:
             restart(raw)   # kuf was updated: let the new code answer this one
             return
         try:

@@ -1,7 +1,7 @@
 """Canned solo lines about what the user is up to right now (song, discord, tabs,
 apps). One idle line in ten comes from here when there's something to talk about."""
 
-import zlib
+from .events import chance
 
 LIFE_PCT = 10          # share of idle lines about the user's life; the rest use the plain pool
 
@@ -52,10 +52,6 @@ LIFE: dict[str, list[str]] = {
 }
 
 
-def _pick(options: list, seed: str):
-    return options[zlib.crc32(seed.encode()) % len(options)]
-
-
 def topics(facts: dict) -> list[tuple[str, dict]]:
     """Every (kind, fields) the goblins can talk about given the current facts."""
     found = []
@@ -78,18 +74,12 @@ def topics(facts: dict) -> list[tuple[str, dict]]:
 
 def wants_life(seed: str) -> bool:
     """LIFE_PCT% of slots are about the user's life."""
-    return zlib.crc32(f"{seed}|odds".encode()) % 100 < LIFE_PCT
+    return chance(seed, "odds", LIFE_PCT)
 
 
 def candidates(facts: dict, user: str) -> list[tuple[str, str]]:
     """Every (template, filled line) about what the user is up to right now."""
     return [(t, t.format(user=user, **fields)) for kind, fields in topics(facts) for t in LIFE[kind]]
-
-
-def life_line(facts: dict, seed: str, user: str) -> str | None:
-    """A line about the user's life right now, LIFE_PCT% of the time; None otherwise."""
-    options = candidates(facts, user)
-    return _pick(options, f"{seed}|line")[1] if options and wants_life(seed) else None
 
 
 KIND_OF = {t: kind for kind, lines in LIFE.items() for t in lines}

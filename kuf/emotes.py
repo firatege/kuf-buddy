@@ -3,8 +3,6 @@
 Row order is always: effects/flies, face, body, couch.
 """
 
-import zlib
-
 COUCH = "▐█▄▄▄▄▄▄▄█▌"      # seat; the armrests are added around the body row
 BODY = "/|▓▓▓|\\ ,,"
 SLOUCH = " |▓▓▓|~ ,,"
@@ -186,6 +184,7 @@ IDLE_BY_MOOD = {
 }
 
 from . import looks  # noqa: E402
+from .events import pick  # noqa: E402
 from .rooms import ROOMS  # noqa: E402  (rooms replace the couch versions of these emotes)
 
 EMOTES.update(ROOMS)
@@ -217,15 +216,12 @@ LINE_EMOTES = [
 
 def for_line(template: str, kind: str | None, feeling: str, seed: str, name: str = "") -> str:
     """An emote that fits what he's saying. `kind` is the life topic, if any."""
-    def pick(options: list[str]) -> str:
-        return options[zlib.crc32(seed.encode()) % len(options)]
-
     if kind in LIFE_EMOTES:
-        return pick(LIFE_EMOTES[kind])
+        return pick(LIFE_EMOTES[kind], seed)
     lowered = template.lower()
     for words, emote in LINE_EMOTES:
         if any(w in lowered for w in words):
             return emote
     if feeling in ("grumpy", "furious"):
-        return pick(IDLE_BY_MOOD[feeling])
-    return pick(looks.habits(name) or TALKING)
+        return pick(IDLE_BY_MOOD[feeling], seed)
+    return pick(looks.habits(name) or TALKING, seed)

@@ -11,9 +11,10 @@ and it ends early the moment anyone in the circle moves on.
 
 import random
 import time
+from typing import NamedTuple
 
 from . import looks, relations, state, stats
-from .banter import NOTICE_S, numbered, reading_s
+from .banter import ANCHOR_WAIT_S, NOTICE_S, _aimed_at, numbered, reading_s
 
 HOSTS = {"Snoop": 0.15, "Çamur": 0.05, "Küf": 0.03}   # who rolls one, and on what share of turns
 BANTER_ODDS = 0.30     # share of turns where two goblins on screen trade a few lines
@@ -26,9 +27,7 @@ MAX_STEPS = 9
 PLAN_TTL_S = 900       # a plan Claude never acted on goes stale
 STEP_MIN_S = 5.0
 LINGER_S = 25.0        # the last step stays up this long before everyone closes
-ANCHOR_WAIT_S = 120
 WAITING = "*eyes on the joint*"
-WAITING_FOR = {"banter": "*listening*"}   # what someone waiting his turn shows, per kind
 STACK = 3              # how many of his own lines stay stacked in his bubble
 ROLL_S = 8.0           # Snoop rolls it first while the others watch; then it's lit and they talk
 INTERRUPT_S = 20.0     # a participant's own new line takes over his screen this long
@@ -87,7 +86,7 @@ def plan_banter(s: dict, owner: str, visible: set[str] | None, rng: random.Rando
     if not me or not around:
         return None
     callers = [o for o in around if (r := neighbors[o]["reaction"]) and now - r["ts"] < CALLED_OUT_S
-               and r.get("to", "").lower() == me.lower()]
+               and _aimed_at(r, me)]
     if not callers and rng.random() >= BANTER_ODDS:
         return None
     other = callers[0] if callers else rng.choice(around)
@@ -173,21 +172,28 @@ def note(planned: dict | None) -> str:
 
 # ── starting (MCP tool) ────────────────────────────────────────────────────────
 
-DEFAULT_EMOTE = {"session": "joint", "refused": "nope", "banter": "chill"}
+class Kind(NamedTuple):
+    emote: str         # a step's emote when Claude didn't pick one
+    waiting: str       # what someone waiting for his turn shows
+    intro_s: float     # rolling time before anyone talks
+    host_smokes: bool  # the roller smokes it himself every step (turned down)
 
 
-def default_emote(kind: str, name: str, host: str = HOST) -> str:
-    """What a step shows when Claude didn't pick an emote."""
-    return "joint" if kind == "refused" and name == host else DEFAULT_EMOTE[kind]
+KINDS = {
+    "session": Kind("joint", WAITING, ROLL_S, False),
+    "refused": Kind("nope", WAITING, ROLL_S, True),
+    "banter": Kind("chill", "*listening*", 0.0, False),
+}
 
 
 def _emote_for(kind: str, name: str, picked: str | None, host: str = HOST) -> str:
     """Claude's pick, except: nobody refusing the joint is shown smoking it, and whoever
     rolled it, turned down, smokes it himself every step."""
-    if kind == "refused" and name == host:
+    rules = KINDS[kind]
+    if rules.host_smokes and name == host:
         return picked if picked in SMOKING else "joint"
-    if not picked or (kind == "refused" and picked == "joint"):
-        return default_emote(kind, name, host)
+    if not picked or (rules.host_smokes and picked == "joint"):
+        return rules.emote
     return picked
 
 
@@ -197,7 +203,7 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
     now = time.time() if now is None else now
     s = state.load()
     planned = s["plans"].get(owner)
-    if not planned or planned["kind"] not in DEFAULT_EMOTE or now - planned["ts"] > PLAN_TTL_S:
+    if not planned or planned["kind"] not in KINDS or now - planned["ts"] > PLAN_TTL_S:
         return "no joint session or banter is planned for this turn; use kuf_react"
     names = [step["name"] for step in steps]
     if [n.lower() for n in names] != [n.lower() for n in planned["order"]]:
@@ -213,14 +219,7 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
 
     def change(cur: dict) -> dict:
         plans = {o: p for o, p in cur["plans"].items() if o != owner}
-        # The host's own reaction is his first line in it, never someone else's.
-        me = cur["buddies"].get(owner, {}).get("name")
-        first = next((w for w in written if w["name"] == me), written[0])
-        reaction = {"emote": first["emote"] if first["name"] == me else "chill",
-                    "line": first["line"] if first["name"] == me else WAITING_FOR.get(planned["kind"], WAITING),
-                    "source": "claude", "to": "", "reply": None, "last_word": None, "ts": now}
-        started = {**cur, "plans": plans, "session": session,
-                   "reactions": {**cur["reactions"], owner: reaction}}
+        started = {**cur, "plans": plans, "session": session}
         remembered = _remember(started, written, now, planned["kind"])
         related = relations.record(remembered, planned["order"], planned["kind"], vibe, joke,
                                    host=host_name, now=now)
@@ -269,8 +268,7 @@ def _cut(s: dict, session: dict) -> bool:
     it started playing. A plain new line from their own Claude only interrupts them for a
     moment (see `_interrupted`), and what the writing turn itself did doesn't count."""
     circle = {step["owner"] for step in session["steps"]}
-    since = session.get("anchor") or session["ts"]
-    return any(e["ts"] > since and e.get("owner") in circle for e in s["events"])
+    return state.moved_on(s, circle, session.get("anchor") or session["ts"])
 
 
 def _interrupted(s: dict, session: dict, owner: str, now: float) -> bool:
@@ -283,7 +281,7 @@ def _interrupted(s: dict, session: dict, owner: str, now: float) -> bool:
 
 def intro_s(session: dict) -> float:
     """Joints get rolled before anyone talks; plain banter starts right away."""
-    return ROLL_S if session.get("kind", "session") in ("session", "refused") else 0.0
+    return KINDS[session.get("kind", "session")].intro_s
 
 
 def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] | None:
@@ -300,7 +298,7 @@ def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] |
         return None
     steps, spans = session["steps"], durations(session["steps"])
     elapsed = now - start_at - intro_s(session)
-    if elapsed < -intro_s(session) or elapsed >= sum(spans) + LINGER_S:
+    if now < start_at or elapsed >= sum(spans) + LINGER_S:
         return None
     host = session["host"]
     if elapsed < 0:
@@ -324,6 +322,12 @@ def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] |
     if holder["owner"] == owner:
         # Face whoever gets it next (or anyone else in the circle).
         return holder["emote"], "\n".join(mine), others[0] if others else None, True
-    waiting = WAITING_FOR.get(session.get("kind", "session"), WAITING)
+    waiting = KINDS[session.get("kind", "session")].waiting
     return "chill", "\n".join(mine) if mine else waiting, holder["owner"], True
 
+
+
+def written_by(s: dict, owner: str, since: float) -> bool:
+    """This terminal's Claude wrote a session at or after `since`."""
+    session = s.get("session")
+    return bool(session) and session["host"] == owner and session["ts"] >= since

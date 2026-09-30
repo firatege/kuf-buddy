@@ -23,6 +23,8 @@ REAL_COLLECT = facts.collect
 def kuf_home(tmp_path, monkeypatch):
     monkeypatch.setenv("KUF_HOME", str(tmp_path / "kuf"))
     monkeypatch.delenv("NIRI_SOCKET", raising=False)   # never talk to the real compositor
+    from kuf import screen as _screen
+    _screen.forget()
     monkeypatch.setattr(facts, "collect", lambda: {})  # nor to playerctl
     use_owner(monkeypatch, "term-a")
     return tmp_path
@@ -536,10 +538,10 @@ def test_every_life_line_formats():
 
 
 def test_one_idle_line_in_ten_is_about_the_users_life():
-    said = [life.life_line(FULL_FACTS, str(slot), "ege") for slot in range(4000)]
-    share = sum(line is not None for line in said) / len(said)
+    share = sum(life.wants_life(str(slot)) for slot in range(4000)) / 4000
     assert 0.07 < share < 0.13
-    assert life.life_line({}, "1", "ege") is None
+    assert life.candidates({}, "ege") == []
+    assert life.candidates(FULL_FACTS, "ege")
 
 
 def test_idle_pool_has_fifty_lines_and_no_heat_talk():
@@ -603,11 +605,11 @@ def test_idle_line_stays_put_within_a_slot_and_never_repeats_back_to_back():
     T0 = time.time()
     name = state.register("term-a")
     pool = [(f"t{i}", f"line {i}") for i in range(5)]
-    first = idle.line_for_slot("term-a", name, "1", T0, pool)
-    assert idle.line_for_slot("term-a", name, "1", T0 + 10, pool) == first
-    said = [idle.line_for_slot("term-a", name, str(k), T0 + 20 * k, pool) for k in range(2, 6)]
+    first = idle.line_for_slot("term-a", name, "1", T0, lambda: pool)
+    assert idle.line_for_slot("term-a", name, "1", T0 + 10, lambda: pool) == first
+    said = [idle.line_for_slot("term-a", name, str(k), T0 + 20 * k, lambda: pool) for k in range(2, 6)]
     assert len({first, *said}) == 5            # all five before any repeat
-    sixth = idle.line_for_slot("term-a", name, "6", T0 + 120, pool)
+    sixth = idle.line_for_slot("term-a", name, "6", T0 + 120, lambda: pool)
     assert sixth == first                      # pool exhausted: the oldest comes back
 
 
@@ -616,8 +618,8 @@ def test_goblins_dont_echo_each_other(monkeypatch):
     T0 = time.time()
     a, b = state.register("term-a"), state.register("term-b")
     pool = [("t1", "one"), ("t2", "two")]
-    first = idle.line_for_slot("term-a", a, "1", T0, pool)
-    assert idle.line_for_slot("term-b", b, "1", T0 + 1, pool) != first
+    first = idle.line_for_slot("term-a", a, "1", T0, lambda: pool)
+    assert idle.line_for_slot("term-b", b, "1", T0 + 1, lambda: pool) != first
     later = T0 + idle.SHARED_COOLDOWN_S + 1       # after a while the line is fair game
     assert idle.choose(pool, idle._last_said(state.load(), b, later), later, "x") in pool
 
@@ -1184,6 +1186,7 @@ def test_mcp_server_hands_a_request_to_the_new_code_when_kuf_changes(monkeypatch
     from kuf import mcp_server
     stamps = iter([1.0, 1.0, 2.0])                       # start, before msg 1, before msg 2 (updated)
     monkeypatch.setattr(mcp_server, "code_stamp", lambda: next(stamps))
+    monkeypatch.setattr(mcp_server, "STAMP_EVERY_S", 0)   # look every message in the test
     handed = []
     msgs = [json.dumps({"jsonrpc": "2.0", "id": i, "method": "ping"}) + "\n" for i in (1, 2)]
     stdout = io.StringIO()
@@ -1511,8 +1514,7 @@ def test_host_never_wears_his_neighbors_opening_line(monkeypatch):
     session.start("t0", [{"name": "Kir", "emote": "kir-10x", "line": "kir opens"},
                          {"name": "Snoop", "emote": "snoop-roll", "line": "snoop answers"},
                          {"name": "Kir", "line": "k2"}, {"name": "Snoop", "line": "s2"}])
-    mine = state.load()["reactions"]["t0"]
-    assert (mine["emote"], mine["line"]) == ("snoop-roll", "snoop answers")
+    assert "t0" not in state.load()["reactions"]          # no stand-in line for the host at all
     session.anchor("t0")
     t0 = state.load()["session"]["anchor"]
     assert session.view(state.load(), "t0", t0 + 1)[1] == "*listening*"     # no joint in a chat
@@ -1580,3 +1582,17 @@ def test_swapped_goblin_starts_without_the_old_ones_last_line(monkeypatch):
     state.set_reaction("term-a", "joint", "puff puff", source="claude")
     state.claim("term-a", "Pas")
     assert "term-a" not in state.load()["reactions"]
+
+
+
+def test_stop_hook_starts_a_session_written_this_turn_without_a_fallback(monkeypatch):
+    circle(monkeypatch, "Snoop", "Kir")
+    use_owner(monkeypatch, "t0")
+    state.start_turn("t0")
+    session.save_plan("t0", {"kind": "banter", "host": "t0", "with": "Kir", "opener": "Snoop",
+                             "order": ["Snoop", "Kir"], "ts": time.time()})
+    session.start("t0", [{"name": "Snoop", "line": "a"}, {"name": "Kir", "line": "b"}])
+    state.add_event("t0", {"kind": "win", "cmd": "pytest"})       # would normally earn a fallback line
+    cli.hook_stop({})
+    s = state.load()
+    assert s["session"].get("anchor") and "t0" not in s["reactions"]

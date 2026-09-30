@@ -21,6 +21,7 @@ STALE_S = 86_400
 MEMORY_LINES = 12      # what each goblin remembers saying, kept across terminals
 SAID_CAP = 60          # idle lines remembered per goblin for the no-repeat cooldowns
 CMD_CAP = 120          # commands are stored this short in events
+PLAN_KEEP_S = 3600     # plans, sessions and rolled joints are dropped after this
 SEEN_EVERY_S = 10      # how often a status line stamps "still here"
 GHOST_S = 60           # no status line for this long = a ghost (process alive, nobody drawing it)
 GHOST_PRUNE_S = 600
@@ -79,9 +80,9 @@ def _prune(s: dict, now: float) -> dict:
         "idle": {o: i for o, i in s["idle"].items() if is_alive(o)},
         "said": {n: [x for x in said if now - x["ts"] < STALE_S][-SAID_CAP:]
                  for n, said in s["said"].items()},
-        "plans": {o: p for o, p in s["plans"].items() if is_alive(o) and now - p["ts"] < 3600},
-        "session": s["session"] if s["session"] and now - s["session"]["ts"] < 3600 else None,
-        "force_joint": {o: f for o, f in s["force_joint"].items() if is_alive(o) and now - f["ts"] < 3600},
+        "plans": {o: p for o, p in s["plans"].items() if is_alive(o) and now - p["ts"] < PLAN_KEEP_S},
+        "session": s["session"] if s["session"] and now - s["session"]["ts"] < PLAN_KEEP_S else None,
+        "force_joint": {o: f for o, f in s["force_joint"].items() if is_alive(o) and now - f["ts"] < PLAN_KEEP_S},
     }
 
 
@@ -111,7 +112,11 @@ def _unique(buddies: dict) -> dict:
 def update(change: Callable[[dict], dict]) -> dict:
     """Apply `change` (old state -> new state) under the lock and persist it."""
     with _locked():
-        new_state = _prune(change(load()), time.time())
+        old = load()
+        changed = change(old)
+        if changed is old:
+            return old          # nothing to do: skip the prune and the rewrite
+        new_state = _prune(changed, time.time())
         tmp = state_file().with_suffix(f".{os.getpid()}.tmp")
         tmp.write_text(json.dumps(new_state, ensure_ascii=False))
         tmp.replace(state_file())
@@ -144,8 +149,7 @@ def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
 def remember(s: dict, name: str, reaction: dict) -> dict:
     """Both sides of a written exchange go into the speakers' memories."""
     ts = reaction["ts"]
-    to = next((v for v in VARIANTS if v.lower() == reaction.get("to", "").lower()),
-              reaction.get("to", ""))
+    to = resolve(reaction.get("to", "")) or reaction.get("to", "")
     memories = {name: {"ts": ts, "said": reaction["line"], "to": to}}
     if to and reaction.get("reply"):
         memories = {name: {**memories[name], "they_said": reaction["reply"]["line"],
@@ -187,10 +191,10 @@ def view(s: dict, owner: str) -> tuple[list[dict], dict | None, float]:
     return events, s["reactions"].get(owner), s["turns"].get(owner, 0.0)
 
 
-def register(owner: str) -> str:
+def register(owner: str, s: dict | None = None) -> str:
     """Name of this terminal's goblin, picking one the first time we see it: the one in
     $KUF_GOBLIN if set (e.g. `KUF_GOBLIN=snoop claude`), else a free one."""
-    known = load()["buddies"].get(owner)
+    known = (s if s is not None else load())["buddies"].get(owner)
     if known:
         return known["name"]
     wanted = resolve(os.environ.get("KUF_GOBLIN", ""))
@@ -200,7 +204,7 @@ def register(owner: str) -> str:
     def change(s: dict) -> dict:
         if owner in s["buddies"]:
             return s
-        taken = {b["name"] for o, b in s["buddies"].items() if is_alive(o) and not is_ghost(b)}
+        taken = live_names(s)
         buddy = {"name": assign(owner, taken), "since": time.time()}
         return {**s, "buddies": {**s["buddies"], owner: buddy}}
 
@@ -231,16 +235,27 @@ def claim(owner: str, name: str) -> str:
     return buddy["name"] if buddy else name
 
 
+def live_names(s: dict, exclude: str | None = None) -> set[str]:
+    """Goblins someone is actually looking at (alive, status line drawn), minus `exclude`'s."""
+    return {b["name"] for o, b in s["buddies"].items()
+            if o != exclude and is_alive(o) and not is_ghost(b)}
+
+
+def moved_on(s: dict, owners: set[str], since: float) -> bool:
+    """Any of these terminals did something (edit, test run, failure) after `since`."""
+    return any(e["ts"] > since and e.get("owner") in owners for e in s["events"])
+
+
 def neighbors(s: dict, owner: str) -> dict[str, dict]:
     """Other live terminals' goblins: owner -> {name, reaction}. Ghosts are left out."""
     return {o: {"name": b["name"], "reaction": s["reactions"].get(o)}
             for o, b in s["buddies"].items() if o != owner and not is_ghost(b)}
 
 
-def mark_seen(owner: str, now: float | None = None) -> bool:
+def mark_seen(owner: str, now: float | None = None, s: dict | None = None) -> bool:
     """Stamp that this terminal's status line is being drawn. True if it wrote."""
     now = time.time() if now is None else now
-    buddy = load()["buddies"].get(owner)
+    buddy = (s if s is not None else load())["buddies"].get(owner)
     if not buddy or now - buddy.get("seen", 0.0) < SEEN_EVERY_S:
         return False
 

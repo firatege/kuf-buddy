@@ -7,6 +7,7 @@ import zlib
 from datetime import datetime
 from pathlib import Path
 
+from .clock import is_night
 from .config import user_name
 
 GRUMPY_WINDOW_S = 180
@@ -150,6 +151,11 @@ def pick(options: list, seed: str):
     return options[zlib.crc32(seed.encode()) % len(options)]
 
 
+def chance(seed: str, tag: str, pct: int) -> bool:
+    """A stable `pct`% roll for this seed (the same slot always rolls the same)."""
+    return zlib.crc32(f"{seed}|{tag}".encode()) % 100 < pct
+
+
 def _fields(event: dict | None, n: int) -> dict:
     event = event or {}
     return {"user": user_name(),
@@ -182,7 +188,7 @@ def mood(events: list[dict], now: float) -> tuple[str, str, dict | None]:
         return "furious", "rampage", last
     if last and last.get("kind") in ("code", "stuff", "fail") and age < GRUMPY_WINDOW_S:
         return "grumpy", "fail" if last["kind"] == "fail" else "code", last
-    if 1 <= datetime.now().hour < 6:
+    if is_night(datetime.now().hour):
         return "sleepy", "night", None
     return "comfy", "idle", None
 

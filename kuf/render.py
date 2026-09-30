@@ -2,10 +2,10 @@
 
 import re
 import textwrap
-import unicodedata
 
 from .buddies import skin, tint as buddy_tint
 from .emotes import EMOTES
+from .text import graphemes, width
 
 SPRITE_COLS = 16
 BUBBLE_TEXT_COLS = 56
@@ -27,15 +27,6 @@ EMOTE_MOOD = {"rage": "furious", "tableflip": "furious", "middle-finger": "furio
               "dead": "sleepy", "sleep": "sleepy", "cry": "sleepy"}
 
 
-def width(text: str) -> int:
-    total = 0
-    for ch in text:
-        if unicodedata.combining(ch):
-            continue
-        total += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
-    return total
-
-
 def pad(text: str, cols: int) -> str:
     return text + " " * max(0, cols - width(text))
 
@@ -44,22 +35,9 @@ MIRROR = dict(zip("()[]{}<>/\\╯╰╭╮┗┛┏┓ᕦᕤ☞☜ﾉ彡ミ▐�
                   ")(][}{><\\/╰╯╮╭┛┗┓┏ᕤᕦ☜☞\\ミ彡▌▐▗▖▝▘▟▙▜▛»«⊳⊲▶◀┌┐\u0301\u0300"))
 
 
-def _graphemes(text: str) -> list[str]:
-    """Split into base characters with their combining marks attached."""
-    clusters: list[str] = []
-    for ch in text:
-        if clusters and unicodedata.combining(ch):
-            clusters[-1] += ch
-        else:
-            clusters.append(ch)
-    return clusters
-
-
 def mirror(rows: list[str]) -> list[str]:
-    """Flip a sprite horizontally so he faces the other way."""
-    cols = max(width(r) for r in rows)
-    return ["".join("".join(MIRROR.get(c, c) for c in g) for g in reversed(_graphemes(pad(r, cols))))
-            for r in rows]
+    """Flip plain rows horizontally (a thin wrapper over mirror_cells)."""
+    return ["".join(g for g, _ in row) for row in mirror_cells([cells(r, None) for r in rows])]
 
 
 TORSO = re.compile("▓+")
@@ -82,7 +60,7 @@ Cell = tuple[str, str]   # (grapheme, color role)
 def cells(row: str, mask: str | None) -> list[Cell]:
     """Pair each grapheme with its mask letter by column; no mask = all goblin."""
     out, col = [], 0
-    for g in _graphemes(row):
+    for g in graphemes(row):
         role = "." if mask is None else (mask[col] if col < len(mask) else " ")
         out.append((g, role))
         col += max(1, width(g))
@@ -182,8 +160,7 @@ def compose(emote: str, line: str, tick: int, mood: str | None = None,
     speech = bubble(line, name, marker)
     rows = max(len(painted), len(speech))
     # Claude Code strips leading spaces from status lines; a leading reset keeps the columns.
-    keep = RESET if color else ""
-    sprite = [keep + " " * SPRITE_COLS] * (rows - len(painted)) + painted     # sit him on the bottom
+    sprite = [" " * SPRITE_COLS] * (rows - len(painted)) + painted     # sit him on the bottom
     speech = speech + [""] * (rows - len(speech))
     face_row = rows - 3
     dim, reset = ((GLOW if highlight else DIM), RESET) if color else ("", "")
@@ -194,10 +171,12 @@ def compose(emote: str, line: str, tick: int, mood: str | None = None,
         if facing == "left":
             if i == face_row and b.endswith(("│", "┤")):
                 b = b[:-1] + ">"   # tail points at his mouth, now on his left
-            text = f"{dim}{pad(b, bubble_cols)}{reset} " if b else keep + " " * (bubble_cols + 1)
+            text = f"{dim}{pad(b, bubble_cols)}{reset} " if b else " " * (bubble_cols + 1)
             out.append(f"{text}{s}".rstrip())
         else:
             if i == face_row and b.startswith(("│", "├")):
                 b = "<" + b[1:]    # the bubble's tail points at his mouth
             out.append(f"{s} {dim}{b}{reset}" if b else s.rstrip())
-    return "\n".join(out)
+    # Claude Code strips leading spaces from status lines; a leading reset keeps the columns.
+    keep = RESET if color else ""
+    return "\n".join(keep + row for row in out)

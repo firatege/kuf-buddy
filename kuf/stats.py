@@ -4,9 +4,6 @@
 from . import relations, state
 from .buddies import VARIANTS
 
-COUNTERS = ("joints", "chats", "refused", "turned_down", "spotlights")
-
-
 def _n(count: int, word: str) -> str:
     return f"{count} {word}" if count == 1 else f"{count} {word}s"
 

@@ -58,10 +58,15 @@ SEASONS = {12: "winter", 1: "winter", 2: "winter", 3: "spring", 4: "spring", 5: 
            6: "summer", 7: "summer", 8: "summer", 9: "autumn", 10: "autumn", 11: "autumn"}
 
 
+def is_night(hour: int) -> bool:
+    """1 to 6 am: goblins sleep, commits get yelled at."""
+    return 1 <= hour < 6
+
+
 def moment(when: datetime | None = None) -> dict:
     when = when or datetime.now()
     hour = when.hour
-    part = ("night" if 1 <= hour < 6 else "morning" if hour < 11 else
+    part = ("night" if is_night(hour) else "morning" if hour < 11 else
             "afternoon" if hour < 18 else "evening")
     weekday = when.strftime("%A")
     return {"part": part, "weekday": weekday, "season": SEASONS[when.month],
@@ -91,5 +96,4 @@ EMOTE_OF = {t: e for lines in POOLS.values() for e, t in lines}
 
 def describe(m: dict) -> str:
     """'a Monday morning in winter', for Claude."""
-    part = "night" if m["part"] == "night" else m["part"]
-    return f"it's a {m['weekday']} {part} in {m['season']}" + (" (weekend)" if m["weekend"] else "")
+    return f"it's a {m['weekday']} {m['part']} in {m['season']}" + (" (weekend)" if m["weekend"] else "")

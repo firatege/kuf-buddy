@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 from . import state
@@ -17,7 +18,10 @@ MAX_DEPTH = 8
 WIDTH_SLACK = 24   # gaps between columns aren't in tile sizes
 
 
+@lru_cache(maxsize=None)
 def _niri(what: str):
+    """niri IPC, asked once per process: kuf processes live well under a second, and one
+    hook or status render would otherwise ask the same thing several times."""
     if not os.environ.get("NIRI_SOCKET") or not shutil.which("niri"):
         return None
     try:
@@ -77,10 +81,16 @@ def visible_owners(owners: list[str]) -> set[str] | None:
     return {o for o in owners if (window_of(o, windows) or {}).get("id") in shown}
 
 
+@lru_cache(maxsize=1)
+def _adopted() -> dict[str, str]:
+    """owner -> the pid whose window it adopted; read once per process."""
+    return {o: b["via"] for o, b in state.load()["buddies"].items() if b.get("via")}
+
+
 def window_of(owner: str, windows: list[dict], via: str | None = None) -> dict | None:
     """The niri window whose process is an ancestor of the Claude process `owner`
     (or of the process it adopted the window from, see adopt_window)."""
-    start = via or state.load()["buddies"].get(owner, {}).get("via") or owner
+    start = via or _adopted().get(owner) or owner
     if not start.isdigit():
         return None
     by_pid = {w.get("pid"): w for w in windows}
@@ -117,24 +127,10 @@ def _socket_inodes(pid: str) -> set[str]:
     return inodes
 
 
-def attach_client(owner: str) -> int | None:
-    """A session living in Claude Code's background daemon is drawn by a
-    `claude attach <id>` process in some terminal; <id> is the name of the daemon
-    session's rv/<id>.sock. Find that terminal-side process."""
-    if not owner.isdigit():
-        return None
-    inodes = _socket_inodes(owner)
-    session_id = None
-    try:
-        for line in Path("/proc/net/unix").read_text().splitlines()[1:]:
-            parts = line.split()
-            if len(parts) >= 8 and parts[6] in inodes and "/rv/" in parts[7]:
-                session_id = Path(parts[7]).stem
-                break
-    except OSError:
-        return None
-    if not session_id:
-        return None
+@lru_cache(maxsize=1)
+def _attach_clients() -> dict[str, int]:
+    """daemon session id -> pid of the `claude attach <id>` showing it; one /proc scan per process."""
+    found: dict[str, int] = {}
     for proc in Path("/proc").iterdir():
         if not proc.name.isdigit():
             continue
@@ -142,9 +138,37 @@ def attach_client(owner: str) -> int | None:
             args = (proc / "cmdline").read_bytes().split(b"\0")
         except OSError:
             continue
-        if b"attach" in args and session_id.encode() in args:
-            return int(proc.name)
-    return None
+        if b"attach" in args:
+            at = args.index(b"attach")
+            if at + 1 < len(args):
+                found[args[at + 1].decode(errors="replace")] = int(proc.name)
+    return found
+
+
+@lru_cache(maxsize=1)
+def _rv_sockets() -> dict[str, str]:
+    """socket inode -> daemon session id, from the rv/<id>.sock listeners."""
+    found: dict[str, str] = {}
+    try:
+        for line in Path("/proc/net/unix").read_text().splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 8 and "/rv/" in parts[7]:
+                found[parts[6]] = Path(parts[7]).stem
+    except OSError:
+        pass
+    return found
+
+
+@lru_cache(maxsize=None)
+def attach_client(owner: str) -> int | None:
+    """A session living in Claude Code's background daemon is drawn by a
+    `claude attach <id>` process in some terminal; <id> is the name of the daemon
+    session's rv/<id>.sock. Find that terminal-side process."""
+    if not owner.isdigit():
+        return None
+    rv = _rv_sockets()
+    session_id = next((rv[i] for i in _socket_inodes(owner) if i in rv), None)
+    return _attach_clients().get(session_id) if session_id else None
 
 
 def project_of(owner: str) -> str:
@@ -219,5 +243,12 @@ def adopt_window(owner: str) -> str | None:
         window = window_of(ghost, windows, via=ghost)
         if window and window["id"] not in taken:
             state.adopt(owner, ghost)
+            _adopted.cache_clear()
             return ghost
     return None
+
+
+def forget() -> None:
+    """Drop this process's cached screen lookups (tests, long-lived callers)."""
+    for cached in (_niri, _adopted, _attach_clients, _rv_sockets, attach_client):
+        cached.cache_clear()

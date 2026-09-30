@@ -14,7 +14,7 @@ from .banter import (context_for_claude, exchange_cut, exchange_over, incoming_r
                      last_word, numbered, owner_named)
 from .config import set_value, user_name
 from .emotes import EMOTES, IDLE_BY_MOOD, for_line
-from .events import TEST_CMD, candidates, canned, classify, edit_count, mood, pick, turn_fallback
+from .events import TEST_CMD, candidates, canned, chance, classify, edit_count, mood, pick, turn_fallback
 from .owner import owner_id
 from .render import compose
 from .screen import adopt_window, side_of, visible_owners
@@ -78,15 +78,18 @@ def current_view(s: dict, owner: str, name: str, now: float) -> View:
     # Seed with the goblin's name and stagger the switch so terminals don't chant in sync.
     offset = zlib.crc32(name.encode()) % IDLE_SWAP_S
     slot = f"{int((now + offset) // IDLE_SWAP_S)}:{name}"
-    about_life = life.candidates(facts.cached(state.state_dir() / "facts.json"), user_name())
-    about_now = clock.candidates(clock.moment(), user_name()) if feeling != "sleepy" else []
-    if about_life and life.wants_life(slot):
-        pool = about_life
-    elif about_now and zlib.crc32(f"{slot}|clock".encode()) % 100 < clock.MOOD_PCT:
-        pool = about_now          # the hour, the day, the season
-    else:
-        pool = candidates(kind, trigger, edits)
-    template, line = idle.line_for_slot(owner, name, slot, now, pool)
+    def pool() -> list[tuple[str, str]]:
+        """Built only when a new slot's line gets picked (about once a minute)."""
+        user = user_name()
+        about_life = life.candidates(facts.cached(state.state_dir() / "facts.json"), user)
+        about_now = clock.candidates(clock.moment(), user) if feeling != "sleepy" else []
+        if about_life and life.wants_life(slot):
+            return about_life
+        if about_now and chance(slot, "clock", clock.MOOD_PCT):
+            return about_now          # the hour, the day, the season
+        return candidates(kind, trigger, edits)
+
+    template, line = idle.line_for_slot(owner, name, slot, now, pool, s)
     return View(idle_emote(template, feeling, slot, name), line, feeling)
 
 
@@ -102,12 +105,12 @@ def cmd_status() -> None:
     read_payload()   # drain stdin; the owner PID already identifies this terminal
     now = time.time()
     owner = owner_id()
-    name = state.register(owner)
-    if state.mark_seen(owner, now):
-        adopt_window(owner)
-    view = current_view(state.load(), owner, name, now)
-    facing = side_of(owner, view.toward) if view.toward else "right"
     s = state.load()
+    name = state.register(owner, s)
+    if state.mark_seen(owner, now, s):
+        adopt_window(owner)
+    view = current_view(s, owner, name, now)
+    facing = side_of(owner, view.toward) if view.toward else "right"
     other = s["buddies"].get(view.toward, {}).get("name") if view.toward else None
     print(compose(view.emote, view.line, int(now), view.mood, name=name, facing=facing or "right",
                   highlight=view.toward is not None if view.glow is None else view.glow,
@@ -162,8 +165,11 @@ def hook_prompt(payload: dict) -> None:
 
 def hook_stop(payload: dict) -> None:
     owner = owner_id()
-    events, reaction, turn_start = state.view(state.load(), owner)
-    session.anchor(owner)                                  # a joint written this turn starts now
+    s = state.load()
+    events, reaction, turn_start = state.view(s, owner)
+    if session.written_by(s, owner, turn_start):
+        session.anchor(owner)                              # a joint or chat written this turn starts now
+        return
     if reaction and reaction["ts"] >= turn_start and reaction.get("source") == "claude":
         if reaction.get("reply"):
             state.anchor_exchange(owner, reaction["ts"])   # start the back-and-forth now
@@ -277,7 +283,7 @@ def cmd_be(rest: list[str]) -> None:
     if not rest:
         s = state.load()
         mine = s["buddies"].get(owner, {}).get("name", "nobody yet")
-        taken = {b["name"] for o, b in s["buddies"].items() if o != owner and not state.is_ghost(b)}
+        taken = state.live_names(s, exclude=owner)
         print(f"this terminal: {mine}")
         print("free: " + ", ".join(n for n in VARIANTS if n not in taken and n != mine))
         print("taken: " + (", ".join(sorted(taken)) or "-"))
@@ -295,7 +301,7 @@ def random_goblin(owner: str) -> str:
     from .buddies import VARIANTS
     s = state.load()
     mine = s["buddies"].get(owner, {}).get("name")
-    taken = {b["name"] for o, b in s["buddies"].items() if o != owner and not state.is_ghost(b)}
+    taken = state.live_names(s, exclude=owner)
     others = [n for n in VARIANTS if n != mine]
     free = [n for n in others if n not in taken]
     return random.choice(free or others)

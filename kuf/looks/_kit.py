@@ -8,16 +8,10 @@ m metal, r rainbow. Row 2 is the body: '▓' there is his shirt and is never
 recolored, so every goblin keeps his own pattern.
 """
 
-import unicodedata
+from ..text import char_width as _width
 
 ROWS, COLS, FRAMES = 4, 16, 4
 TORSO_ROW = 2
-
-
-def _width(ch: str) -> int:
-    if unicodedata.combining(ch):
-        return 0
-    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
 
 
 def mask(row: str, colors: dict[str, str], body: bool = False) -> str:

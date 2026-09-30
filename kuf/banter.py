@@ -21,8 +21,13 @@ QUOTE = 70             # memories are quoted this short; every turn pays for the
 LIFE_ODDS = 0.10      # 1 turn in 10 the line reads something into what the user is up to
 
 
+def _clip(text: str, limit: int) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
 def _snippet(line: str) -> str:
-    return line if len(line) <= SNIPPET else line[: SNIPPET - 1] + "…"
+    return _clip(line, SNIPPET)
 
 
 def _words_per_sec() -> float:
@@ -89,7 +94,7 @@ def exchange_cut(s: dict, jabber: str, reaction: dict) -> bool:
     theirs = s["reactions"].get(target) if target else None
     if theirs and theirs["ts"] > ts:
         return True
-    return any(e["ts"] > ts and e.get("owner") in (jabber, target) for e in s["events"])
+    return state.moved_on(s, {jabber, target}, ts)
 
 
 def _aimed_at(reaction: dict, name: str) -> bool:
@@ -144,8 +149,7 @@ def _ago(seconds: float) -> str:
 
 
 def _q(text: str) -> str:
-    text = " ".join(str(text).split())
-    return f'"{text if len(text) <= QUOTE else text[: QUOTE - 1] + "…"}"'
+    return f'"{_clip(text, QUOTE)}"'
 
 
 def recall(s: dict, name: str, now: float) -> str:
@@ -157,7 +161,10 @@ def recall(s: dict, name: str, now: float) -> str:
         if m.get("session"):
             what = {"banter": "chat", "refused": "turned-down joint"}.get(m.get("kind"), "joint")
             others = [line for line in m["session"] if not line.startswith(f"{name}:")]
-            last = f" · {others[-1].split(':', 1)[0]}: {_q(others[-1].split(':', 1)[1])}" if others else ""
+            last = ""
+            if others:
+                who, said = others[-1].split(":", 1)
+                last = f" · {who}: {_q(said)}"
             lines.append(f'  {when}, {what} w/ {", ".join(m["with"])}: you {_q(m["said"])}{last}')
         elif m.get("heard"):
             lines.append(f'  {when}, {m["from"]}: {_q(m["heard"])} · you: {_q(m["said"])}')

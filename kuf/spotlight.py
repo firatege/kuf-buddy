@@ -6,11 +6,10 @@ import re
 import time
 from datetime import datetime
 
-from . import state, stats
+from . import clock, state, stats
 
 SPOTLIGHT_S = 10.0
 COOLDOWN_S = 60.0      # per kind of event
-NIGHT = range(1, 6)
 
 # (kind, pattern); first match wins, so the specific ones go first
 EVENTS = [
@@ -50,7 +49,7 @@ STAND_IN = {
 def classify(command: str, hour: int | None = None) -> str | None:
     kind = next((k for k, pattern in EVENTS if pattern.search(command)), None)
     hour = datetime.now().hour if hour is None else hour
-    return "night-commit" if kind == "commit" and hour in NIGHT else kind
+    return "night-commit" if kind == "commit" and clock.is_night(hour) else kind
 
 
 def trigger(kind: str, by: str, now: float | None = None) -> bool:
@@ -63,7 +62,7 @@ def trigger(kind: str, by: str, now: float | None = None) -> bool:
             return s
         started.append(True)
         star = STARS[kind][0]
-        live = {b["name"] for b in s["buddies"].values() if not state.is_ghost(b)}
+        live = state.live_names(s)
         credited = star if star in live else s["buddies"].get(by, {}).get("name")
         counted = stats.bump(s, credited, "spotlights") if credited else s
         return {**counted, "spotlight": {"kind": kind, "by": by, "ts": now},
@@ -79,7 +78,7 @@ def view(s: dict, owner: str, name: str, now: float) -> tuple[str, str] | None:
     if not spot or not 0 <= now - spot["ts"] < SPOTLIGHT_S:
         return None
     star, emote, line = STARS[spot["kind"]]
-    live = {b["name"] for o, b in s["buddies"].items() if not state.is_ghost(b)}
+    live = state.live_names(s)
     if name == star:
         return emote, line
     if star not in live and owner == spot["by"]:
