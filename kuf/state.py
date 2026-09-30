@@ -22,6 +22,7 @@ MEMORY_LINES = 12      # what each goblin remembers saying, kept across terminal
 SAID_CAP = 60          # idle lines remembered per goblin for the no-repeat cooldowns
 CMD_CAP = 120          # commands are stored this short in events
 PLAN_KEEP_S = 3600     # plans, sessions and rolled joints are dropped after this
+LEGACY = ("crowd", "spotlight", "spotlight_last", "nag")   # keys older versions wrote
 SEEN_EVERY_S = 10      # how often a status line stamps "still here"
 GHOST_S = 60           # no status line for this long = a ghost (process alive, nobody drawing it)
 GHOST_PRUNE_S = 600
@@ -69,8 +70,9 @@ def _prune(s: dict, now: float) -> dict:
     def keep(owner: str, ts: float) -> bool:
         return now - ts < STALE_S and is_alive(owner)
 
+    kept = {k: v for k, v in s.items() if k not in LEGACY}
     return {
-        **s,
+        **kept,
         "events": [_short(e) for e in s["events"] if keep(e.get("owner", ""), e["ts"])][-MAX_EVENTS:],
         "reactions": {o: r for o, r in s["reactions"].items() if keep(o, r["ts"])},
         "turns": {o: ts for o, ts in s["turns"].items() if keep(o, ts)},
@@ -181,8 +183,13 @@ def anchor_exchange(owner: str, reaction_ts: float) -> dict:
     return update(change)
 
 
+def turn(s: dict, owner: str, now: float) -> dict:
+    """Mark the start of this terminal's turn (pure; see start_turn)."""
+    return {**s, "turns": {**s["turns"], owner: now}}
+
+
 def start_turn(owner: str) -> dict:
-    return update(lambda s: {**s, "turns": {**s["turns"], owner: time.time()}})
+    return update(lambda s: turn(s, owner, time.time()))
 
 
 def view(s: dict, owner: str) -> tuple[list[dict], dict | None, float]:

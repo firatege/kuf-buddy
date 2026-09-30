@@ -3,7 +3,7 @@ user to get up, drink water, look at something far away. Once every 45 minutes a
 
 import time
 
-from . import state
+from . import moments, state
 
 GAP_S = 15 * 60        # a pause this long counts as a break and resets the streak
 STREAK_S = 2 * 3600    # nonstop work before a reminder
@@ -26,23 +26,28 @@ NAG: dict[str, tuple[str, str]] = {
 FALLBACK = ("stretch", "you've been at it for hours. stand up, drink some water.")
 
 
+def activity(s: dict, owner: str, now: float) -> tuple[dict, bool]:
+    """Log one prompt of activity: (new state, whether this is the moment to remind)."""
+    act = s.get("activity") or {"start": now, "last": now, "reminded": 0.0}
+    start = now if now - act["last"] > GAP_S else act["start"]
+    remind = now - start >= STREAK_S and now - act["reminded"] >= EVERY_S
+    logged = {**s, "activity": {"start": start, "last": now,
+                                "reminded": now if remind else act["reminded"]}}
+    return (moments.put(logged, "nag", {"by": owner}, now) if remind else logged), remind
+
+
 def on_prompt(owner: str, now: float | None = None) -> bool:
     """Log activity; True when this prompt is the moment to remind."""
     now = time.time() if now is None else now
     due = []
 
     def change(s: dict) -> dict:
-        act = s.get("activity") or {"start": now, "last": now, "reminded": 0.0}
-        start = now if now - act["last"] > GAP_S else act["start"]
-        remind = now - start >= STREAK_S and now - act["reminded"] >= EVERY_S
-        if remind:
-            due.append(True)
-        updated = {"start": start, "last": now, "reminded": now if remind else act["reminded"]}
-        nag = {"by": owner, "ts": now} if remind else s.get("nag")
-        return {**s, "activity": updated, "nag": nag}
+        logged, remind = activity(s, owner, now)
+        due.append(remind)
+        return logged
 
     state.update(change)
-    return bool(due)
+    return due[-1]
 
 
 def streak(s: dict, now: float) -> float:
@@ -51,8 +56,8 @@ def streak(s: dict, now: float) -> float:
 
 
 def view(s: dict, owner: str, name: str, now: float) -> tuple[str, str] | None:
-    nag = s.get("nag")
-    if not nag or nag["by"] != owner or not 0 <= now - nag["ts"] < SHOW_S:
+    nag = moments.current(s, "nag", SHOW_S, now)
+    if not nag or nag["by"] != owner:
         return None
     return NAG.get(name, FALLBACK)
 

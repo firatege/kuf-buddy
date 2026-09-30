@@ -144,7 +144,7 @@ def hook_fail(payload: dict) -> None:
 
 def hook_prompt(payload: dict) -> None:
     owner = owner_id()
-    state.start_turn(owner)
+    now = time.time()
     context = context_for_claude(owner)
     s = state.load()
     visible = visible_owners(list(s["buddies"]))
@@ -155,10 +155,19 @@ def hook_prompt(payload: dict) -> None:
         planned = None                         # let the one on screen finish first
     else:
         planned = session.plan(s, owner, visible) or session.plan_banter(s, owner, visible)
-    session.save_plan(owner, planned)
+    due = []
+
+    def change(cur: dict) -> dict:
+        """Turn start, this turn's plan and the activity log in one write."""
+        logged, remind = breaks.activity(session.with_plan(state.turn(cur, owner, now), owner, planned),
+                                         owner, now)
+        due.append(remind)
+        return logged
+
+    after = state.update(change)
     extra = session.note(planned)
-    if breaks.on_prompt(owner):
-        extra = f"{extra}\n{breaks.note(state.load(), time.time())}".strip()
+    if due and due[-1]:
+        extra = f"{extra}\n{breaks.note(after, now)}".strip()
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
                                              "additionalContext": f"{context}\n{extra}" if extra else context}}))
 

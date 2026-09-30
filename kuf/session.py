@@ -129,13 +129,15 @@ def force(owner: str, target: str | None = None) -> None:
                                                  owner: {"target": target, "ts": time.time()}}})
 
 
-def save_plan(owner: str, planned: dict | None) -> None:
-    def change(s: dict) -> dict:
-        plans = {o: p for o, p in s["plans"].items() if o != owner}
-        forced = {o: f for o, f in s["force_joint"].items() if o != owner or not planned}
-        return {**s, "plans": {**plans, owner: planned} if planned else plans, "force_joint": forced}
+def with_plan(s: dict, owner: str, planned: dict | None) -> dict:
+    """This turn's plan for `owner` (pure; see save_plan). A used-up forced joint is dropped."""
+    plans = {o: p for o, p in s["plans"].items() if o != owner}
+    forced = {o: f for o, f in s["force_joint"].items() if o != owner or not planned}
+    return {**s, "plans": {**plans, owner: planned} if planned else plans, "force_joint": forced}
 
-    state.update(change)
+
+def save_plan(owner: str, planned: dict | None) -> None:
+    state.update(lambda s: with_plan(s, owner, planned))
 
 
 def note(planned: dict | None) -> str:

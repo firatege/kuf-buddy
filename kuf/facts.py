@@ -8,6 +8,7 @@ the prompt.
 """
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ from pathlib import Path
 from .screen import niri_windows
 
 CACHE_S = 15           # the status line runs every second; sensors don't need to
+LOCK_S = 10            # a refresh another terminal started this recently is still running
 BROWSERS = {"brave-browser", "firefox", "chromium", "google-chrome"}
 BROWSER_SUFFIX = re.compile(r" [-—] (Brave|Mozilla Firefox|Chromium|Google Chrome)$")
 YOUTUBE = re.compile(r"^(?:\(\d+\) )?(.+?) - YouTube$")
@@ -167,12 +169,20 @@ def cached(path: Path, now: float | None = None) -> dict:
             return saved["facts"]
     except (OSError, ValueError, KeyError, TypeError):
         pass
-    fresh = collect()
+    lock = path.with_suffix(".lock")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".tmp")
+        if lock.exists() and now - lock.stat().st_mtime < LOCK_S:
+            return saved["facts"]           # another terminal is refreshing: the old facts will do
+        lock.touch()
+    except (OSError, NameError, KeyError, TypeError):
+        pass
+    fresh = collect()
+    try:
+        tmp = path.with_suffix(f".{os.getpid()}.tmp")
         tmp.write_text(json.dumps({"ts": now, "facts": fresh}, ensure_ascii=False))
         tmp.replace(path)
+        lock.unlink(missing_ok=True)
     except OSError:
         pass
     return fresh

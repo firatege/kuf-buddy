@@ -3,10 +3,9 @@
 cops). If that goblin isn't open, the goblin of the terminal where it happened reacts."""
 
 import re
-import time
 from datetime import datetime
 
-from . import clock, state, stats
+from . import clock, moments, state, stats
 
 SPOTLIGHT_S = 10.0
 COOLDOWN_S = 60.0      # per kind of event
@@ -53,34 +52,23 @@ def classify(command: str, hour: int | None = None) -> str | None:
 
 
 def trigger(kind: str, by: str, now: float | None = None) -> bool:
-    now = time.time() if now is None else now
-    started = []
-
-    def change(s: dict) -> dict:
-        last = s.get("spotlight_last", {})
-        if now - last.get(kind, 0.0) < COOLDOWN_S:
-            return s
-        started.append(True)
+    """Put the event's star in the spotlight (once a minute per kind of event)."""
+    def credit(s: dict) -> dict:
         star = STARS[kind][0]
-        live = state.live_names(s)
-        credited = star if star in live else s["buddies"].get(by, {}).get("name")
-        counted = stats.bump(s, credited, "spotlights") if credited else s
-        return {**counted, "spotlight": {"kind": kind, "by": by, "ts": now},
-                "spotlight_last": {**last, kind: now}}
+        credited = star if star in state.live_names(s) else s["buddies"].get(by, {}).get("name")
+        return stats.bump(s, credited, "spotlights") if credited else s
 
-    state.update(change)
-    return bool(started)
+    return moments.fire("spotlight", {"kind": kind, "by": by}, COOLDOWN_S, per=kind, now=now, also=credit)
 
 
 def view(s: dict, owner: str, name: str, now: float) -> tuple[str, str] | None:
     """(emote, outburst) if this terminal's goblin is in the spotlight right now."""
-    spot = s.get("spotlight")
-    if not spot or not 0 <= now - spot["ts"] < SPOTLIGHT_S:
+    spot = moments.current(s, "spotlight", SPOTLIGHT_S, now)
+    if not spot:
         return None
     star, emote, line = STARS[spot["kind"]]
-    live = state.live_names(s)
     if name == star:
         return emote, line
-    if star not in live and owner == spot["by"]:
+    if star not in state.live_names(s) and owner == spot["by"]:
         return STAND_IN[spot["kind"]]
     return None

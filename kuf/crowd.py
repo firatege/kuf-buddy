@@ -1,9 +1,7 @@
 """Crowd moments: when tests pass (or blow up) in any terminal, every goblin reacts at
 once, each in his own way. Solo outbursts, not a conversation, so they're canned."""
 
-import time
-
-from . import state
+from . import moments
 
 CROWD_S = 12.0         # how long everyone reacts
 COOLDOWN_S = 120.0     # at most one crowd moment every two minutes
@@ -27,23 +25,12 @@ FALLBACK = {"win": ("flex", "ayyy it passed"), "fail": ("facepalm", "welp. it br
 
 def trigger(kind: str, by: str, now: float | None = None) -> bool:
     """Start a crowd moment unless one happened recently. True if it started."""
-    now = time.time() if now is None else now
-    started = []
-
-    def change(s: dict) -> dict:
-        last = s.get("crowd")
-        if last and now - last["ts"] < COOLDOWN_S:
-            return s
-        started.append(True)
-        return {**s, "crowd": {"kind": kind, "by": by, "ts": now}}
-
-    state.update(change)
-    return bool(started)
+    return moments.fire("crowd", {"kind": kind, "by": by}, COOLDOWN_S, now=now)
 
 
 def view(s: dict, name: str, now: float) -> tuple[str, str] | None:
     """(emote, outburst) while a crowd moment is on."""
-    crowd = s.get("crowd")
-    if not crowd or not 0 <= now - crowd["ts"] < CROWD_S:
+    crowd = moments.current(s, "crowd", CROWD_S, now)
+    if not crowd:
         return None
     return REACTIONS.get(name, {}).get(crowd["kind"], FALLBACK[crowd["kind"]])

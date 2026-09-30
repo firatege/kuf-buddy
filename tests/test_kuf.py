@@ -1353,7 +1353,7 @@ def test_the_star_reacts_wherever_he_is_else_the_local_goblin(monkeypatch):
 def test_post_hook_fires_the_spotlight(monkeypatch):
     monkeypatch.setattr(spotlight, "classify", lambda cmd, hour=None: "push")
     cli.hook_post({"tool_name": "Bash", "tool_input": {"command": "git push"}})
-    assert state.load()["spotlight"]["kind"] == "push"
+    assert state.load()["moments"]["spotlight"]["kind"] == "push"
 
 
 # ── stats ──────────────────────────────────────────────────────────────────────
@@ -1466,7 +1466,7 @@ def test_a_borrowed_clock_move_falls_back_for_others():
 
 # ── break reminders ────────────────────────────────────────────────────────────
 
-from kuf import breaks  # noqa: E402
+from kuf import breaks, moments  # noqa: E402
 
 
 def test_break_reminder_after_two_hours_nonstop_then_quiet_for_a_while():
@@ -1490,7 +1490,7 @@ def test_a_real_pause_resets_the_streak():
 def test_the_nag_shows_in_that_terminal_in_his_voice(monkeypatch):
     name = state.register("term-a")
     t = time.time()
-    state.update(lambda s: {**s, "nag": {"by": "term-a", "ts": t}})
+    state.update(lambda s: moments.put(s, "nag", {"by": "term-a"}, t))
     view = cli.current_view(state.load(), "term-a", name, t + 5)
     assert (view.emote, view.line) == breaks.NAG[name]
     assert breaks.view(state.load(), "term-a", name, t + breaks.SHOW_S + 1) is None
@@ -1596,3 +1596,26 @@ def test_stop_hook_starts_a_session_written_this_turn_without_a_fallback(monkeyp
     cli.hook_stop({})
     s = state.load()
     assert s["session"].get("anchor") and "t0" not in s["reactions"]
+
+
+def test_only_one_terminal_refreshes_the_facts_at_a_time(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(facts, "collect", lambda: calls.append(1) or {"song": "new"})
+    path = tmp_path / "facts.json"
+    path.write_text(json.dumps({"ts": 0.0, "facts": {"song": "old"}}))
+    path.with_suffix(".lock").touch()                                  # someone else is on it
+    assert facts.cached(path, now=time.time()) == {"song": "old"} and not calls
+    path.with_suffix(".lock").unlink()
+    assert facts.cached(path, now=time.time()) == {"song": "new"} and calls == [1]
+    assert not path.with_suffix(".lock").exists()
+
+
+def test_prompt_hook_writes_the_state_once(monkeypatch):
+    writes = []
+    real = state.update
+    monkeypatch.setattr(state, "update", lambda change: writes.append(1) or real(change))
+    state.register("term-a")
+    writes.clear()
+    monkeypatch.setattr(cli, "context_for_claude", lambda owner: "ctx")
+    cli.hook_prompt({})
+    assert len(writes) == 1 and state.load()["turns"]["term-a"]
