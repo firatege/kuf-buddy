@@ -265,7 +265,7 @@ def test_claude_gets_told_who_it_voices_and_who_said_what(monkeypatch):
     state.set_reaction("term-b", "roast", "lmao that diff", source="claude", to=me)
 
     note = banter.context_for_claude("term-a")
-    assert f"you voice {me}" in note
+    assert f"You voice {me}" in note
     assert "on the left (web)" in note and "lmao that diff" in note and "(TO YOU)" in note
 
 
@@ -895,7 +895,7 @@ def test_written_session_plays_step_by_step_and_everyone_remembers(monkeypatch):
     assert at("t0", sum(spans) + session.LINGER_S + 1) is None                  # everyone closes together
     memory = state.memories(state.load(), "Çamur")[-1]
     assert memory["with"] == ["Snoop"] and len(memory["session"]) == 3
-    assert "joint session with Snoop" in banter.recall(state.load(), "Çamur", time.time())
+    assert 'joint w/ Snoop: you "bro what if the couch is high too"' in banter.recall(state.load(), "Çamur", time.time())
 
 
 def test_session_ends_for_everyone_when_one_moves_on(monkeypatch):
@@ -1541,3 +1541,21 @@ def test_joint_command_works_for_every_roller(monkeypatch, capsys):
     cli.main(["be", "camur"])
     cli.main(["joint"])
     assert "Çamur passes it" in capsys.readouterr().out
+
+
+
+def test_the_per_turn_context_stays_small(monkeypatch):
+    circle(monkeypatch, "Snoop", "Kir")
+    for i in range(12):
+        session.save_plan("t0", {"kind": "banter", "host": "t0", "with": "Kir", "opener": "Snoop",
+                                 "order": ["Snoop", "Kir"], "ts": time.time()})
+        session.start("t0", [{"name": "Snoop", "line": f"{i} " + "a long rambling line " * 5},
+                             {"name": "Kir", "line": f"{i} " + "an even longer answer " * 5}])
+    note = banter.context_for_claude("t0")
+    assert len(note) < 1600, len(note)                                   # ~400 tokens a turn
+    assert note.count("chat w/ Kir") == banter.RECALL
+
+
+def test_long_commands_are_stored_short():
+    state.add_event("term-a", {"kind": "win", "cmd": "pytest " + "x" * 5000})
+    assert len(state.load()["events"][-1]["cmd"]) == state.CMD_CAP

@@ -12,7 +12,7 @@ from . import state
 
 OWN_COOLDOWN_S = 1800
 SHARED_COOLDOWN_S = 300
-MAX_SAID = 120         # remembered (template, when) pairs per goblin
+MAX_SAID = state.SAID_CAP   # remembered (template, when) pairs per goblin
 
 
 def _last_said(s: dict, name: str, now: float) -> dict[str, float]:

@@ -16,7 +16,8 @@ EXCHANGE_S = 60        # how long the finished exchange stays up before both clo
 ANCHOR_WAIT_S = 120    # give up waiting for the turn to end after this long
 CONTEXT_S = 900        # how old a neighbor's line can be and still be mentioned to Claude
 SNIPPET = 40
-RECALL = 6             # how many of his own past lines Claude is reminded of
+RECALL = 4             # how many memories Claude is reminded of each turn
+QUOTE = 70             # memories are quoted this short; every turn pays for them in context
 LIFE_ODDS = 0.10      # 1 turn in 10 the line reads something into what the user is up to
 
 
@@ -142,25 +143,31 @@ def _ago(seconds: float) -> str:
     return f"{minutes // 60}h ago" if minutes < 1440 else f"{minutes // 1440}d ago"
 
 
+def _q(text: str) -> str:
+    text = " ".join(str(text).split())
+    return f'"{text if len(text) <= QUOTE else text[: QUOTE - 1] + "…"}"'
+
+
 def recall(s: dict, name: str, now: float) -> str:
-    """His recent lines, so running jokes and grudges carry over between turns."""
+    """His recent lines, so running jokes and grudges carry over between turns. Kept
+    short: this goes into Claude's context every turn."""
     lines = []
     for m in state.memories(s, name)[-RECALL:]:
         when = _ago(now - m["ts"])
         if m.get("session"):
-            what = {"banter": "chat", "refused": "turned-down joint"}.get(m.get("kind"), "joint session")
-            lines.append(f'  {when}, {what} with {", ".join(m["with"])}: ' + " / ".join(m["session"]))
+            what = {"banter": "chat", "refused": "turned-down joint"}.get(m.get("kind"), "joint")
+            others = [line for line in m["session"] if not line.startswith(f"{name}:")]
+            last = f" · {others[-1].split(':', 1)[0]}: {_q(others[-1].split(':', 1)[1])}" if others else ""
+            lines.append(f'  {when}, {what} w/ {", ".join(m["with"])}: you {_q(m["said"])}{last}')
         elif m.get("heard"):
-            lines.append(f'  {when}, {m["from"]} to you: "{m["heard"]}" / you: "{m["said"]}"')
+            lines.append(f'  {when}, {m["from"]}: {_q(m["heard"])} · you: {_q(m["said"])}')
         elif m.get("they_said"):
-            lines.append(f'  {when}, you to {m["to"]}: "{m["said"]}" / {m["to"]}: '
-                         f'"{m["they_said"]}" / you: "{m.get("then", "")}"')
+            lines.append(f'  {when}, you to {m["to"]}: {_q(m["said"])} · {m["to"]}: {_q(m["they_said"])}')
         else:
-            lines.append(f'  {when}, you: "{m["said"]}"')
+            lines.append(f'  {when}: {_q(m["said"])}')
     if not lines:
         return ""
-    return (f"What {name} said lately (remember it: keep running jokes and grudges going, "
-            f"call back to them, never repeat a line):\n" + "\n".join(lines))
+    return "Your recent lines (call back to them, never repeat one):\n" + "\n".join(lines)
 
 
 def context_for_claude(owner: str) -> str:
@@ -168,16 +175,12 @@ def context_for_claude(owner: str) -> str:
     name = state.register(owner)
     s = state.load()
     me = VARIANTS[name]
-    lines = [f"[kuf-buddy] This turn you voice {name} ('{me['meaning']}'): {me['trait']}. "
-             f"Talk mostly to the user ({user_name()}). Only talk to neighbors when told BANTER "
-             f"or JOINT below; then let your relationship (listed per neighbor) and your inside "
-             f"jokes shape it, and tag it with a `vibe` and, if a new one came up, a `joke`.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
-    lines.append(f"Right now {clock.describe(clock.moment())}: let that color the mood "
-                 f"(groggy mornings, lazy evenings, weekend party, monday grump) without announcing it.")
+    lines = [f"[kuf-buddy] You voice {name} ('{me['meaning']}'): {me['trait']}. "
+             f"Talk to the user ({user_name()}); neighbors only when told BANTER or JOINT.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
+    lines.append(f"Now: {clock.describe(clock.moment())} (let it color the mood, don't announce it).")
     own = looks.signatures(name)
     if own:
-        lines.append(f"{name}'s own emotes (only {name} can use them, prefer them when they fit): "
-                     f"{', '.join(own)}.")
+        lines.append(f"Your own emotes: {', '.join(own)}.")
     memory = recall(s, name, time.time())
     if memory:
         lines.append(memory)

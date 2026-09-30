@@ -19,6 +19,8 @@ from .owner import is_alive
 MAX_EVENTS = 200
 STALE_S = 86_400
 MEMORY_LINES = 12      # what each goblin remembers saying, kept across terminals
+SAID_CAP = 60          # idle lines remembered per goblin for the no-repeat cooldowns
+CMD_CAP = 120          # commands are stored this short in events
 SEEN_EVERY_S = 10      # how often a status line stamps "still here"
 GHOST_S = 60           # no status line for this long = a ghost (process alive, nobody drawing it)
 GHOST_PRUNE_S = 600
@@ -68,14 +70,14 @@ def _prune(s: dict, now: float) -> dict:
 
     return {
         **s,
-        "events": [e for e in s["events"] if keep(e.get("owner", ""), e["ts"])][-MAX_EVENTS:],
+        "events": [_short(e) for e in s["events"] if keep(e.get("owner", ""), e["ts"])][-MAX_EVENTS:],
         "reactions": {o: r for o, r in s["reactions"].items() if keep(o, r["ts"])},
         "turns": {o: ts for o, ts in s["turns"].items() if keep(o, ts)},
         "buddies": _unique({o: b for o, b in s["buddies"].items()
                             if is_alive(o) and now - b.get("seen", now) < GHOST_PRUNE_S}),
         "history": {n: h[-MEMORY_LINES:] for n, h in s["history"].items()},   # even goblins we don't know yet
         "idle": {o: i for o, i in s["idle"].items() if is_alive(o)},
-        "said": {n: [x for x in said if now - x["ts"] < STALE_S]
+        "said": {n: [x for x in said if now - x["ts"] < STALE_S][-SAID_CAP:]
                  for n, said in s["said"].items()},
         "plans": {o: p for o, p in s["plans"].items() if is_alive(o) and now - p["ts"] < 3600},
         "session": s["session"] if s["session"] and now - s["session"]["ts"] < 3600 else None,
@@ -116,8 +118,13 @@ def update(change: Callable[[dict], dict]) -> dict:
     return new_state
 
 
+def _short(event: dict) -> dict:
+    cmd = event.get("cmd")
+    return {**event, "cmd": cmd[:CMD_CAP]} if isinstance(cmd, str) and len(cmd) > CMD_CAP else event
+
+
 def add_event(owner: str, event: dict) -> dict:
-    stamped = {"ts": time.time(), "owner": owner, **event}
+    stamped = {"ts": time.time(), "owner": owner, **_short(event)}
     return update(lambda s: {**s, "events": s["events"] + [stamped]})
 
 
