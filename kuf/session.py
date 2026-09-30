@@ -28,6 +28,7 @@ STEP_MIN_S = 5.0
 LINGER_S = 25.0        # the last step stays up this long before everyone closes
 ANCHOR_WAIT_S = 120
 WAITING = "*eyes on the joint*"
+WAITING_FOR = {"banter": "*listening*"}   # what someone waiting his turn shows, per kind
 STACK = 3              # how many of his own lines stay stacked in his bubble
 ROLL_S = 8.0           # Snoop rolls it first while the others watch; then it's lit and they talk
 INTERRUPT_S = 20.0     # a participant's own new line takes over his screen this long
@@ -210,8 +211,12 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
 
     def change(cur: dict) -> dict:
         plans = {o: p for o, p in cur["plans"].items() if o != owner}
-        reaction = {"emote": written[0]["emote"], "line": written[0]["line"], "source": "claude",
-                    "to": "", "reply": None, "last_word": None, "ts": now}
+        # The host's own reaction is his first line in it, never someone else's.
+        me = cur["buddies"].get(owner, {}).get("name")
+        first = next((w for w in written if w["name"] == me), written[0])
+        reaction = {"emote": first["emote"] if first["name"] == me else "chill",
+                    "line": first["line"] if first["name"] == me else WAITING_FOR.get(planned["kind"], WAITING),
+                    "source": "claude", "to": "", "reply": None, "last_word": None, "ts": now}
         started = {**cur, "plans": plans, "session": session,
                    "reactions": {**cur["reactions"], owner: reaction}}
         remembered = _remember(started, written, now, planned["kind"])
@@ -312,5 +317,6 @@ def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] |
     if holder["owner"] == owner:
         # Face whoever gets it next (or anyone else in the circle).
         return holder["emote"], "\n".join(mine), others[0] if others else None, True
-    return "chill", "\n".join(mine) if mine else WAITING, holder["owner"], True
+    waiting = WAITING_FOR.get(session.get("kind", "session"), WAITING)
+    return "chill", "\n".join(mine) if mine else waiting, holder["owner"], True
 

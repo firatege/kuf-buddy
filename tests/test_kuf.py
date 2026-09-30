@@ -1501,3 +1501,17 @@ def test_too_long_lines_are_sent_back_not_cut():
     assert out["isError"] and "too long" in out["content"][0]["text"]
     assert "term-a" not in state.load()["reactions"]
     assert not react("it's all shipped, boss. one commit. i'll smoke yours since you're sick")["isError"]
+
+
+def test_host_never_wears_his_neighbors_opening_line(monkeypatch):
+    circle(monkeypatch, "Snoop", "Kir")
+    session.save_plan("t0", {"kind": "banter", "host": "t0", "with": "Kir", "opener": "Kir",
+                             "order": ["Kir", "Snoop", "Kir", "Snoop"], "ts": time.time()})
+    session.start("t0", [{"name": "Kir", "emote": "kir-10x", "line": "kir opens"},
+                         {"name": "Snoop", "emote": "snoop-roll", "line": "snoop answers"},
+                         {"name": "Kir", "line": "k2"}, {"name": "Snoop", "line": "s2"}])
+    mine = state.load()["reactions"]["t0"]
+    assert (mine["emote"], mine["line"]) == ("snoop-roll", "snoop answers")
+    session.anchor("t0")
+    t0 = state.load()["session"]["anchor"]
+    assert session.view(state.load(), "t0", t0 + 1)[1] == "*listening*"     # no joint in a chat
