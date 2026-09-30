@@ -50,7 +50,7 @@ LINES: dict[str, list[str]] = {
         "{user} durum satırını okumayı bırak da iş yap biraz.",
         "o bug kendi kendine düzelmez. ben de el sürmem, baştan söyliyim.",
         "terminali bütün gece açık bırakan kim? ha. sensin.",
-        "*havayı koklar* ...teknik borç kokuyo burası.",
+        "*havayı koklar* ...burası 'sonra düzeltirim' kokuyo.",
         "akıl verirdim de linter'ı dinlemeyen beni mi dinlicek.",
         "beni bu kanepeden kaldırmak için kıyamet kopması lazım. o da bakarız.",
     ],
