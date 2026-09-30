@@ -34,6 +34,8 @@ ROLL_S = 8.0           # Snoop rolls it first while the others watch; then it's 
 INTERRUPT_S = 20.0     # a participant's own new line takes over his screen this long
 SMOKING = ("joint", "smoke", "snoop-bong", "snoop-rings", "snoop-roll")   # what the roller does when turned down
 ROLLING = "*rolling one up*"
+NO_DICE = ("The dice and odds are backstage machinery: never mention rolls, dice, numbers or "
+           "chances; it's just a hangout.")
 
 
 # ── planning (prompt hook) ─────────────────────────────────────────────────────
@@ -163,13 +165,13 @@ def note(planned: dict | None) -> str:
                 f"Call kuf_session with exactly {len(planned['order'])} steps, speakers in this order: "
                 f"{' -> '.join(planned['order'])}. {host} offers, {target} says no, {host} takes a hit "
                 f"and pushes, {target} refuses harder, {host} blows smoke and has the last word. For "
-                f"{target} use 'nope' or one of their own emotes. Lowercase, short.")
+                f"{target} use 'nope' or one of their own emotes. Lowercase, short. {NO_DICE}")
     circle = ", ".join(dict.fromkeys(planned["order"]))
     return (f"JOINT SESSION instead of kuf_react this turn: {planned.get('host_name', HOST)} sparks one up and passes it "
             f"around ({circle}). Call kuf_session with exactly {len(planned['order'])} steps, "
             f"speakers in this order: {' -> '.join(planned['order'])}. Each step is the holder "
             f"taking a hit and saying one line in their own voice, answering the one before, "
-            f"so it builds into a real stoned conversation. Lowercase, short, no raw facts.")
+            f"so it builds into a real stoned conversation. Lowercase, short, no raw facts. {NO_DICE}")
 
 
 # ── starting (MCP tool) ────────────────────────────────────────────────────────
