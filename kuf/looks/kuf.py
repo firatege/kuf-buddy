@@ -1,0 +1,106 @@
+"""Küf's own animations and habits."""
+
+from ._kit import scene  # noqa: F401  (used by his signature animations)
+
+NAME = "Küf"
+HABITS = ['nap', 'scratch', 'burp']             # shared emotes he falls back to; his own ones are added too
+ACCEPTS_JOINT = 0.85           # chance he takes the joint when Snoop passes it
+REFUSAL = ''
+
+COUCH = "▐█▄▄▄▄▄▄▄█▌     "
+SPORES = {"·": "g", "°": "g", "*": "g"}
+TEXT = {ch: "y" for ch in "abcdefghijklmnopqrstuvwxyz.!?3"}
+
+EMOTES: dict[str, dict] = {
+    "kuf-rot": scene("sinks into the couch until he's part of it, mold spores rising", [
+        ["   ·    °       ",
+         "  (-_-)  ugh    ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        [" °   ·    ·  °  ",
+         "  (=_=)   ·     ",
+         "▐▌ |▓▓▓| ▐▌     ",
+         COUCH],
+        ["·  °  ·  °   ·  ",
+         "   °  ·  °      ",
+         "▐▌(-_-)▓▓▓▐▌    ",
+         COUCH],
+        ["  ° · *  · ° *  ",
+         " ·  *  mmf  ·   ",
+         "▐▌▄▄(-_-)▄▐▌    ",
+         COUCH],
+    ], {**SPORES, **TEXT}),
+    "kuf-remote": scene("reaches for the remote, can't be bothered, gives up", [
+        ["                ",
+         "  (¬_¬)         ",
+         "▐▌/|▓▓▓|\\▐▌  ▭  ",
+         COUCH],
+        ["      nngh      ",
+         "  (ಠ_ಠ)ﾉ~~      ",
+         "▐▌/|▓▓▓| ▐▌  ▭  ",
+         COUCH],
+        ["     NNGHHH     ",
+         "  (>_<)ﾉ~~~~    ",
+         "▐▌/|▓▓▓| ▐▌  ▭  ",
+         COUCH],
+        ["  eh. later.    ",
+         "  (-_-)         ",
+         "▐▌/|▓▓▓|\\▐▌  ▭  ",
+         COUCH],
+    ], {"▭": "m", **TEXT, **{ch: "y" for ch in "NGH"}}),
+    "kuf-crumbs": scene("digs something out of the couch cushions and eats it anyway", [
+        ["       ?        ",
+         "  (¬_¬)         ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["   *dig dig*    ",
+         "  (ò_ó)         ",
+         "▐▌/|▓▓▓| ▐▌     ",
+         "▐█▄▄▄▄ﾉ▄▄█▌     "],
+        ["   ✧ jackpot    ",
+         "  (ˆ▽ˆ)ﾉ◉       ",
+         "▐▌/|▓▓▓| ▐▌     ",
+         COUCH],
+        ["  nom. 3 wks old",
+         "  (˘ε˘)  crunch ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+    ], {"◉": "e", "✧": "y", "*": "y", **TEXT}),
+    "kuf-burrito": scene("rolled up in a blanket burrito, one hand pokes out, retreats", [
+        ["        z       ",
+         "  ▗(-_-)▄▄▄▄▖   ",
+         "  ▐░░░░░░░░░▌   ",
+         COUCH],
+        ["       zZ       ",
+         "  ▗(-‿-)▄▄▄▄▖   ",
+         "  ▐▒░░░░░░░░▌ﾉ  ",
+         COUCH],
+        ["  cold. nope.   ",
+         "  ▗(ಠ_ಠ)▄▄▄▄▖   ",
+         "  ▐░░░░░░░░▒▌   ",
+         COUCH],
+        ["     zZz        ",
+         "  ▗(-_-)▄▄▄▄▖   ",
+         "  ▐░░▒░░░░░░▌   ",
+         COUCH],
+    ], {"▗": "b", "▄": "b", "▖": "b", "▐": "b", "▌": "b", "░": "b", "▒": "b",
+        "z": "s", "Z": "s", **{ch: "y" for ch in "coldnpe."}}),
+    "kuf-swat": scene("lazy swat at the flies, misses, lets one land on his face", [
+        ["   °  ·   °     ",
+         "  (¬_¬)         ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["  ·   °  ·      ",
+         "  (ಠ_ಠ)ﾉ        ",
+         "▐▌/|▓▓▓| ▐▌     ",
+         COUCH],
+        [" ·    °   °  ·  ",
+         "  (ò_ó)ﾉ~ miss  ",
+         "▐▌/|▓▓▓| ▐▌     ",
+         COUCH],
+        ["      ·   ·     ",
+         "  (-°-)  fine.  ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+    ], {"°": "s", "·": "s", **{ch: "y" for ch in "misfne."}}),
+}

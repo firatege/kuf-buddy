@@ -1,0 +1,106 @@
+"""Balgam's own animations and habits."""
+
+from ._kit import scene
+
+NAME = "Balgam"
+HABITS = ['tea', 'puke']             # shared emotes he falls back to; his own ones are added too
+ACCEPTS_JOINT = 0.1           # chance he takes the joint when Snoop passes it
+REFUSAL = 'coughs his lungs out just looking at it, back in his day'
+
+TALK = {c: "y" for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!?.,'"}
+COUCH = "▐█▄▄▄▄▄▄▄█▌"
+TABLE = " ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"
+
+EMOTES: dict[str, dict] = {
+    "balgam-newspaper": scene("reading the paper, then a *HACK* blows it clean across the room", [
+        ["  hmph.         ",
+         "  (ಠ_ಠ)┌───┐    ",
+         "▐▌/|▓▓▓|│≡≡≡│   ",
+         COUCH],
+        ["       *HACK*   ",
+         "  (ಠдಠ)┌───┐    ",
+         "▐▌/|▓▓▓|│≡≡≡│●  ",
+         COUCH],
+        ["  *HACK*  ╱≡╱   ",
+         "  (>д<)●   ≡╲   ",
+         "▐▌/|▓▓▓|\\    ●  ",
+         COUCH],
+        ["  MY PAPER!!    ",
+         "  (ಠдಠ)ﾉ   ╱≡╱  ",
+         "▐▌/|▓▓▓|      ● ",
+         COUCH],
+    ], {**TALK, "┌": "m", "─": "m", "┐": "m", "│": "m", "≡": "m", "╱": "m", "╲": "m",
+        "*": "e", "●": "g"}),
+    "balgam-rocking": scene("creaking back and forth in his rocking chair, remembering better days", [
+        ["      creak     ",
+         "  (-_-)         ",
+         " ║/|▓▓▓|\\       ",
+         " ╲━━━━━━╯       "],
+        ["                ",
+         "   (-_-)        ",
+         "  ║/|▓▓▓|\\      ",
+         "  ╰━━━━━━╯      "],
+        ["         creak  ",
+         "    (-_-)       ",
+         "   ║/|▓▓▓|\\     ",
+         "   ╰━━━━━━╱     "],
+        ["  back in my day",
+         "   (¬_¬)        ",
+         "  ║/|▓▓▓|\\      ",
+         "  ╰━━━━━━╯      "],
+    ], {**TALK, "║": "w", "╲": "w", "━": "w", "╯": "w", "╰": "w", "╱": "w"}),
+    "balgam-cough": scene("full coughing fit, phlegm flying everywhere, insists he's fine", [
+        ["    *ahem*      ",
+         "  (ಠ_ಠ)         ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["  *HACK*   ●    ",
+         "  (>д<)● ·      ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        [" *HURK* ● · ●   ",
+         "  (×д×)ﾉ   ●    ",
+         "▐▌ |▓▓▓|\\▐▌ ●   ",
+         COUCH],
+        ["   i'm fine.    ",
+         "  (ಠ_ಠ)         ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH + "  ●▂●"],
+    ], {**TALK, "*": "e", "●": "g", "·": "g", "▂": "g"}),
+    "balgam-fist": scene("shaking his fist at a cloud that's been asking for it", [
+        ["         ▂▄▆▄▂  ",
+         "  (ಠ_ಠ)         ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["        ▂▄▆▄▂   ",
+         "  (ಠдಠ)o  HEY!  ",
+         "▐▌/|▓▓▓|/▐▌     ",
+         COUCH],
+        ["       ▂▄▆▄▂    ",
+         "  (ಠдಠ) o LAWN! ",
+         "▐▌/|▓▓▓| /▐▌    ",
+         COUCH],
+        ["  ▂▄▆▄▂╎ ╎      ",
+         "  (ಠ_ಠ)╎ typical",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+    ], {**TALK, "o": ".", "▂": "s", "▄": "s", "▆": "s", "╎": "c"}),
+    "balgam-pills": scene("sorting his weekly pill box, until a cough scatters the lot", [
+        ["   monday...    ",
+         "  (ಠ_ಠ)  ●     ",
+         " /|▓▓▓|\\[□□□□□]",
+         TABLE],
+        ["   tuesday..    ",
+         "  (¬_¬)ﾉ       ",
+         " /|▓▓▓|\\[●●□□□]",
+         TABLE],
+        [" *HACK*  ● ◦ ●  ",
+         "  (>д<)  ◦   ●  ",
+         " /|▓▓▓|\\[□□□□□]",
+         TABLE],
+        ["  start over.   ",
+         "  (ಠ_ಠ)         ",
+         " /|▓▓▓|\\[□□□□□]",
+         " ▔▔▔▔●▔▔◦▔▔▔●▔▔▔"],
+    ], {**TALK, "*": "e", "●": "e", "◦": "y", "□": "m", "[": "m", "]": "m", "▔": "w"}),
+}

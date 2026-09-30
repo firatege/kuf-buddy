@@ -1,0 +1,108 @@
+"""Snoop's own animations and habits."""
+
+from ._kit import scene  # noqa: F401  (used by his signature animations)
+
+NAME = "Snoop"
+HABITS = ['smoke', 'smoke', 'trip', 'chill', 'eat']             # shared emotes he falls back to; his own ones are added too
+ACCEPTS_JOINT = 1.0           # chance he takes the joint when Snoop passes it
+REFUSAL = ''
+
+SMOKE = {"░": "s", "▒": "s", "▓": "s", "~": "s", "*": "e", "✸": "e", "═": " "}
+TEXT = {c: "y" for c in "abcdefghijklmnopqrstuvwxyz.!"}
+COUCH = "▐█▄▄▄▄▄▄▄█▌"
+
+EMOTES: dict[str, dict] = {
+    "snoop-bong": scene("ripping the bong, bubbles gurgling, one fat cloud", [
+        ["                ",
+         "  (-ε-)═╗       ",
+         "  /|▓▓▓|║✸      ",
+         "  ▐▄▄▄▄▌(∘)     "],
+        ["          blub  ",
+         "  (˘ε˘)═╗       ",
+         "  /|▓▓▓|║✸      ",
+         "  ▐▄▄▄▄▌(°)     "],
+        ["  ░▒▓▓▓▒░       ",
+         "  (ˆ○ˆ) ╗       ",
+         "  /|▓▓▓|║*      ",
+         "  ▐▄▄▄▄▌(◦)     "],
+        [" ░  ▒▓▒  ░      ",
+         "  (-‿-) ╗ smooth",
+         "  /|▓▓▓|║·      ",
+         "  ▐▄▄▄▄▌( )     "],
+    ], {**SMOKE, **TEXT, "╗": "c", "║": "c", "(": ".", ")": ".", "∘": "c", "°": "c", "◦": "c",
+        "○": ".", "·": "s", "▐": "w", "▄": "w", "▌": "w"}),
+    "snoop-rings": scene("blowing lazy smoke rings that drift off", [
+        ["                ",
+         "  (-‿-)         ",
+         "▐▌/|▓▓▓|y═*     ",
+         COUCH],
+        ["                ",
+         "  (˘ε˘) °       ",
+         "▐▌/|▓▓▓|y═*     ",
+         COUCH],
+        ["         ○      ",
+         "  (˘ε˘) °       ",
+         "▐▌/|▓▓▓|y═*     ",
+         COUCH],
+        ["          ◯  ○  ",
+         "  (-‿-)  smooth ",
+         "▐▌/|▓▓▓|y═*     ",
+         COUCH],
+    ], {**SMOKE, **{c: "y" for c in "smth"}, "°": "s", "○": "s", "◯": "s"}),
+    "snoop-roll": scene("crumbling, rolling, licking and sparking one, no rush", [
+        ["  ,, ,  crumble ",
+         "  (-‿-)         ",
+         "  /|▓▓▓|\\       ",
+         " ▔▔[,,,,]▔▔▔▔▔  "],
+        ["        roll..  ",
+         "  (˘‿˘)         ",
+         "  /|▓▓▓|\\       ",
+         " ▔▔[════]▔▔▔▔▔  "],
+        ["        *lick*  ",
+         "  (˘ε˘)════     ",
+         "  /|▓▓▓|        ",
+         " ▔▔▔▔▔▔▔▔▔▔▔▔▔  "],
+        ["   ░ ~  smooth  ",
+         "  (-‿-)y═✸      ",
+         "  /|▓▓▓|        ",
+         " ▔▔▔▔▔▔▔▔▔▔▔▔▔  "],
+    ], {**{k: v for k, v in SMOKE.items() if k != "═"}, **{c: "y" for c in "crumblelicksmoth."},
+        ",": "g", "[": "w", "]": "w", "▔": "w", "═": "y"}),
+    "snoop-lowrider": scene("cruising low, hydraulics bouncing the whip", [
+        ["     ♪          ",
+         "   (-‿-)ﾉ       ",
+         " ▄▄█|▓▓▓|█▄▄▄▖  ",
+         " ▀(◎)▀▀▀▀▀(◎)▀  "],
+        ["      ♫   bounce",
+         "    (˘‿˘)ﾉ      ",
+         " ▀▀█|▓▓▓|█▀▀▀▘  ",
+         "  ║(◎)   ║(◎)   "],
+        ["   ♪            ",
+         "   (-‿-)ﾉ       ",
+         " ▄▄█|▓▓▓|█▄▄▄▖  ",
+         " ▀(◎)▀▀▀▀▀(◎)▀  "],
+        ["   ♫    smooth  ",
+         "  (ˆ‿ˆ)ﾉ        ",
+         " ▀▀█|▓▓▓|█▀▀▀▘  ",
+         "  ║(◎)   ║(◎)   "],
+    ], {**{c: "y" for c in "bounceemoth"}, "♪": "y", "♫": "y", "▄": "r", "▀": "r", "█": "r",
+        "▖": "r", "▘": "r", "◎": "m", "║": "m"}),
+    "snoop-munchies": scene("slowly spooning cereal on the couch, crumbs everywhere", [
+        ["                ",
+         "  (˘‿˘)         ",
+         "▐▌/|▓▓▓|╲°∘°╱   ",
+         COUCH],
+        ["                ",
+         "  (˘○˘)ﾉ°       ",
+         "▐▌/|▓▓▓| ╲∘°╱   ",
+         COUCH],
+        ["      crunch..  ",
+         "  (˘ε˘)  ·   ·  ",
+         "▐▌/|▓▓▓| ╲°∘╱   ",
+         COUCH],
+        ["      smooth    ",
+         "  (-‿-)    ·    ",
+         "▐▌/|▓▓▓| ╲ ∘╱   ",
+         COUCH + " · · "],
+    ], {**TEXT, "╲": "m", "╱": "m", "°": "y", "∘": "y", "·": "y", "○": "."}),
+}

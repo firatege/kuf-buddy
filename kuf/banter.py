@@ -3,7 +3,7 @@
 import random
 import time
 
-from . import facts, state
+from . import clock, facts, looks, relations, state
 from .buddies import VARIANTS
 from .config import load as load_config, user_name
 from .screen import describe_neighbors
@@ -17,7 +17,7 @@ ANCHOR_WAIT_S = 120    # give up waiting for the turn to end after this long
 CONTEXT_S = 900        # how old a neighbor's line can be and still be mentioned to Claude
 SNIPPET = 40
 RECALL = 6             # how many of his own past lines Claude is reminded of
-LIFE_ODDS = 0.75      # 3 turns in 4 the line is about what the user is up to
+LIFE_ODDS = 0.10      # 1 turn in 10 the line reads something into what the user is up to
 
 
 def _snippet(line: str) -> str:
@@ -59,6 +59,11 @@ def last_word_delay(reaction: dict) -> float:
     return min(reply_delay(reaction) + reading_s(reply.get("line", "")), LAST_WORD_DELAY_MAX_S)
 
 
+def numbered(n: int, line: str) -> str:
+    """'2› line': the order to read a conversation in, since its bubbles sit side by side."""
+    return f"{n}› {line}"
+
+
 def exchange_end(reaction: dict) -> float:
     """Seconds after the start when both sides of the exchange close, together."""
     return last_word_delay(reaction) + EXCHANGE_S
@@ -71,6 +76,21 @@ def exchange_over(reaction: dict | None, now: float) -> bool:
     return start is not None and now - start >= exchange_end(reaction)
 
 
+def owner_named(s: dict, name: str) -> str | None:
+    return next((o for o, b in s["buddies"].items() if b["name"].lower() == name.lower()), None)
+
+
+def exchange_cut(s: dict, jabber: str, reaction: dict) -> bool:
+    """Either side did something since the jab (a new line or a reaction to an edit,
+    a failure, a test run): the exchange is over on both screens at once."""
+    target = owner_named(s, reaction.get("to", ""))
+    ts = reaction.get("anchor") or reaction["ts"]      # the writing turn's own commands don't count
+    theirs = s["reactions"].get(target) if target else None
+    if theirs and theirs["ts"] > ts:
+        return True
+    return any(e["ts"] > ts and e.get("owner") in (jabber, target) for e in s["events"])
+
+
 def _aimed_at(reaction: dict, name: str) -> bool:
     return reaction.get("to", "").lower() == name.lower()
 
@@ -81,10 +101,12 @@ def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, 
         reaction = buddy["reaction"]
         if not reaction or not reaction.get("reply") or not _aimed_at(reaction, my_name):
             continue
+        if exchange_cut(s, other, reaction):
+            continue
         start = exchange_start(reaction, now)
         delay = reply_delay(reaction)
         if start is not None and delay <= now - start < exchange_end(reaction):
-            return reaction["reply"]["emote"], reaction["reply"]["line"], other
+            return reaction["reply"]["emote"], numbered(2, reaction["reply"]["line"]), other
     return None
 
 
@@ -96,18 +118,21 @@ def last_word(reaction: dict | None, now: float) -> tuple[str, str] | None:
     start = exchange_start(reaction, now)
     delay = last_word_delay(reaction)
     if start is not None and delay <= now - start < exchange_end(reaction):
-        return reaction["last_word"]["emote"], f'{reaction["line"]}\n{reaction["last_word"]["line"]}'
+        return reaction["last_word"]["emote"], f'{numbered(1, reaction["line"])}\n{numbered(3, reaction["last_word"]["line"])}'
     return None
 
 
 def topic_note(life: str, roll: float | None = None) -> str:
-    """This turn's topic, drawn here so the 3:1 split holds without Claude keeping count."""
+    """This turn's topic, drawn here so the odds hold without Claude keeping count. The
+    user's facts are only shown on the rare turns that are about them, so they don't
+    leak into every line."""
     roll = random.random() if roll is None else roll
     if life and roll < LIFE_ODDS:
-        return (f"THIS TURN: talk about what {user_name()} is up to right now, not the task: "
-                f"{life}.")
-    what = f" (for later: {life})" if life else ""
-    return f"THIS TURN: react to the conversation or the code.{what}"
+        return (f"THIS TURN: read {user_name()}'s mood or situation from these clues and say "
+                f"what you conclude, like a friend who notices things: {life}. Never repeat "
+                f"the clues themselves (no song or artist names, no counts, no app names, no "
+                f"clock time); only your guess about what they mean.")
+    return "THIS TURN: react to the conversation or the code."
 
 
 def _ago(seconds: float) -> str:
@@ -122,7 +147,10 @@ def recall(s: dict, name: str, now: float) -> str:
     lines = []
     for m in state.memories(s, name)[-RECALL:]:
         when = _ago(now - m["ts"])
-        if m.get("heard"):
+        if m.get("session"):
+            what = {"banter": "chat", "refused": "turned-down joint"}.get(m.get("kind"), "joint session")
+            lines.append(f'  {when}, {what} with {", ".join(m["with"])}: ' + " / ".join(m["session"]))
+        elif m.get("heard"):
             lines.append(f'  {when}, {m["from"]} to you: "{m["heard"]}" / you: "{m["said"]}"')
         elif m.get("they_said"):
             lines.append(f'  {when}, you to {m["to"]}: "{m["said"]}" / {m["to"]}: '
@@ -141,9 +169,15 @@ def context_for_claude(owner: str) -> str:
     s = state.load()
     me = VARIANTS[name]
     lines = [f"[kuf-buddy] This turn you voice {name} ('{me['meaning']}'): {me['trait']}. "
-             f"Talk mostly to the user ({user_name()}). When you jab a neighbor (to=<name>), also "
-             f"write their `reply` in THEIR voice AND your `last_word` (both required). Prefer "
-             f"neighbors that are on screen.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
+             f"Talk mostly to the user ({user_name()}). Only talk to neighbors when told BANTER "
+             f"or JOINT below; then let your relationship (listed per neighbor) and your inside "
+             f"jokes shape it, and tag it with a `vibe` and, if a new one came up, a `joke`.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
+    lines.append(f"Right now {clock.describe(clock.moment())}: let that color the mood "
+                 f"(groggy mornings, lazy evenings, weekend party, monday grump) without announcing it.")
+    own = looks.signatures(name)
+    if own:
+        lines.append(f"{name}'s own emotes (only {name} can use them, prefer them when they fit): "
+                     f"{', '.join(own)}.")
     memory = recall(s, name, time.time())
     if memory:
         lines.append(memory)
@@ -161,5 +195,6 @@ def context_for_claude(owner: str) -> str:
             if reaction.get("to", "").lower() == name.lower():
                 said += " (TO YOU)"
         trait = VARIANTS.get(buddy["name"], VARIANTS["Küf"])["trait"]
-        lines.append(f"- {buddy['name']} ({trait}) {labels[other]}{said}")
+        lines.append(f"- {buddy['name']} ({trait}) {labels[other]}{said} · "
+                     f"{relations.describe(s, name, buddy['name'])}")
     return "\n".join(lines)

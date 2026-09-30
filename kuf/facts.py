@@ -82,6 +82,7 @@ def apps() -> dict:
 
 
 DISCORD_SUFFIX = " - Discord"
+DISCORD_FRESH_S = 300  # the title keeps the last opened chat forever; only trust it this long
 DISCORD_IDLE = {"Discord", "Friends", "Friends - Discord", ""}
 
 
@@ -97,9 +98,20 @@ def discord_chat(title: str) -> str | None:
     return server or channel
 
 
+def idle_for(window: dict, now: float | None = None) -> float:
+    """Seconds since the user last had this window focused (0 while it is)."""
+    if window.get("is_focused"):
+        return 0.0
+    stamp = window.get("focus_timestamp")
+    if not isinstance(stamp, dict):
+        return float("inf")
+    now = time.clock_gettime(time.CLOCK_MONOTONIC) if now is None else now
+    return max(0.0, now - stamp.get("secs", 0) - stamp.get("nanos", 0) / 1e9)
+
+
 def discord() -> dict:
     for w in niri_windows():
-        if GOSSIP_APPS.get(w.get("app_id", "")) == "discord":
+        if GOSSIP_APPS.get(w.get("app_id", "")) == "discord" and idle_for(w) <= DISCORD_FRESH_S:
             chat = discord_chat(w.get("title") or "")
             if chat:
                 return {"discord_chat": chat}

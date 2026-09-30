@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import state
 from .owner import parent_and_name
 
 MAX_DEPTH = 8
@@ -76,12 +77,21 @@ def visible_owners(owners: list[str]) -> set[str] | None:
     return {o for o in owners if (window_of(o, windows) or {}).get("id") in shown}
 
 
-def window_of(owner: str, windows: list[dict]) -> dict | None:
-    """The niri window whose process is an ancestor of the Claude process `owner`."""
-    if not owner.isdigit():
+def window_of(owner: str, windows: list[dict], via: str | None = None) -> dict | None:
+    """The niri window whose process is an ancestor of the Claude process `owner`
+    (or of the process it adopted the window from, see adopt_window)."""
+    start = via or state.load()["buddies"].get(owner, {}).get("via") or owner
+    if not start.isdigit():
         return None
     by_pid = {w.get("pid"): w for w in windows}
-    pid = int(owner)
+    found = _walk_up(int(start), by_pid)
+    if found or via:
+        return found
+    client = attach_client(owner)
+    return _walk_up(client, by_pid) if client else None
+
+
+def _walk_up(pid: int, by_pid: dict) -> dict | None:
     for _ in range(MAX_DEPTH):
         if pid in by_pid:
             return by_pid[pid]
@@ -89,6 +99,51 @@ def window_of(owner: str, windows: list[dict]) -> dict | None:
         if found is None or found[0] <= 1:
             return None
         pid = found[0]
+    return None
+
+
+def _socket_inodes(pid: str) -> set[str]:
+    inodes = set()
+    try:
+        for fd in Path(f"/proc/{pid}/fd").iterdir():
+            try:
+                target = os.readlink(fd)
+            except OSError:
+                continue
+            if target.startswith("socket:["):
+                inodes.add(target[8:-1])
+    except OSError:
+        pass
+    return inodes
+
+
+def attach_client(owner: str) -> int | None:
+    """A session living in Claude Code's background daemon is drawn by a
+    `claude attach <id>` process in some terminal; <id> is the name of the daemon
+    session's rv/<id>.sock. Find that terminal-side process."""
+    if not owner.isdigit():
+        return None
+    inodes = _socket_inodes(owner)
+    session_id = None
+    try:
+        for line in Path("/proc/net/unix").read_text().splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 8 and parts[6] in inodes and "/rv/" in parts[7]:
+                session_id = Path(parts[7]).stem
+                break
+    except OSError:
+        return None
+    if not session_id:
+        return None
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            args = (proc / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if b"attach" in args and session_id.encode() in args:
+            return int(proc.name)
     return None
 
 
@@ -146,3 +201,23 @@ def side_of(me: str, other: str) -> str | None:
     except (KeyError, TypeError, IndexError):
         return None
     return None if gap == 0 else ("right" if gap > 0 else "left")
+
+
+def adopt_window(owner: str) -> str | None:
+    """A background-daemon session has no window of its own. Its terminal still holds
+    the old client process, which went ghost when the daemon took over drawing; hand
+    that window to the windowless session. Returns the adopted ghost, if any."""
+    windows = niri_windows()
+    if not windows or window_of(owner, windows):
+        return None
+    s = state.load()
+    taken = {w["id"] for o, b in s["buddies"].items()
+             if o != owner and not state.is_ghost(b) and (w := window_of(o, windows))}
+    ghosts = sorted(((state.last_seen(b), o) for o, b in s["buddies"].items()
+                     if o != owner and state.is_ghost(b)), reverse=True)
+    for _, ghost in ghosts:
+        window = window_of(ghost, windows, via=ghost)
+        if window and window["id"] not in taken:
+            state.adopt(owner, ghost)
+            return ghost
+    return None

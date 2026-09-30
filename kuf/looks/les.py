@@ -1,0 +1,107 @@
+"""Leş's own animations and habits."""
+
+from ._kit import scene  # noqa: F401  (used by his signature animations)
+
+NAME = "Leş"
+HABITS = ['dead', 'shrug']             # shared emotes he falls back to; his own ones are added too
+ACCEPTS_JOINT = 0.7           # chance he takes the joint when Snoop passes it
+REFUSAL = ''
+
+GHOST = {"{": "s", "}": "s", "°": "s", ".": "s", "~": "s"}
+COFFIN = {"▐": "w", "▌": "w", "▝": "w", "▀": "w", "▘": "w"}
+COUCH = "▐█▄▄▄▄▄▄▄█▌     "
+
+EMOTES: dict[str, dict] = {
+    "les-coffin": scene("lies in his coffin; his ghost drifts up, looks around, comes back", [
+        ["                ",
+         "                ",
+         " ▐(-_-)▓▓▓==▌   ",
+         " ▝▀▀▀▀▀▀▀▀▀▀▘   "],
+        ["                ",
+         "   {°.°}~       ",
+         " ▐(x_x)▓▓▓==▌   ",
+         " ▝▀▀▀▀▀▀▀▀▀▀▘   "],
+        ["   {°.°}~  meh  ",
+         "                ",
+         " ▐(x_x)▓▓▓==▌   ",
+         " ▝▀▀▀▀▀▀▀▀▀▀▘   "],
+        ["  nah. back in. ",
+         "  ~{-.-}        ",
+         " ▐(-_-)▓▓▓==▌   ",
+         " ▝▀▀▀▀▀▀▀▀▀▀▘   "],
+    ], {**GHOST, **COFFIN, **{ch: "y" for ch in "mehnabckio"}}),
+    "les-raincloud": scene("his own personal raincloud pours on him; lightning; figures", [
+        ["  ░▒▒▓▓▒▒░      ",
+         "  '(-_-) '      ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["  ░▒▓▓▒▒▒░      ",
+         "   (-_-)'  '    ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["  ░▒▒▓▓▒▒░      ",
+         "  ϟ(-_-) '      ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["  ░▒▓▒▒▓▒░      ",
+         "  '(-_-)'figures",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+    ], {"░": "s", "▒": "s", "▓": "s", "'": "c", "ϟ": "y", **{ch: "y" for ch in "figures"}}),
+    "les-void": scene("stares into the void; the void opens its eyes and stares back", [
+        ["   ...          ",
+         "  (-_-)   ▐████▌",
+         "  /|▓▓▓|\\ ▐████▌",
+         "   /   \\  ▝▀▀▀▀▘"],
+        ["   ......       ",
+         "  (-_-)   ▐████▌",
+         "  /|▓▓▓|\\ ▐████▌",
+         "   /   \\  ▝▀▀▀▀▘"],
+        ["           ...  ",
+         "  (-_-)   ▐ʘ██ʘ▌",
+         "  /|▓▓▓|\\ ▐████▌",
+         "   /   \\  ▝▀▀▀▀▘"],
+        ["  same.   same. ",
+         "  (¬_¬)   ▐¬██¬▌",
+         "  /|▓▓▓|\\ ▐████▌",
+         "   /   \\  ▝▀▀▀▀▘"],
+    ], {"▐": "b", "█": "b", "▌": "b", "▝": "b", "▀": "b", "▘": "b", "ʘ": "e",
+        ".": "s", **{ch: "s" for ch in "same"}}),
+    "les-candle": scene("blows out the candle and sits happily in the dark", [
+        ["            ·   ",
+         "  (-_-)     *   ",
+         "  /|▓▓▓|\\   ▐   ",
+         "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+        ["            ░   ",
+         "  (-ε-)~~   ✸   ",
+         "  /|▓▓▓|\\   ▐   ",
+         "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+        ["           ░▒   ",
+         "  (-_-)     ~   ",
+         "  /|▓▓▓|\\   ▐   ",
+         "▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+        ["                ",
+         "   ·_·          ",
+         "                ",
+         "  finally. dark."],
+    ], {"*": "e", "✸": "e", "·": "y", "░": "s", "▒": "s", "~": "s", "▐": "y", "▔": "w",
+        **{ch: "s" for ch in "finaly.drk"}}),
+    "les-flatline": scene("his heart monitor goes flat; he shrugs", [
+        ["──╱╲────╱╲──────",
+         "  (-_-)  beep   ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["────╱╲────╱╲────",
+         "  (-_-)    beep ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["────────────────",
+         "  (x_x) beeeeeee",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["────────────────",
+         "  ┐(-_-)┌  eh.  ",
+         "▐▌ |▓▓▓| ▐▌     ",
+         COUCH],
+    ], {"─": "g", "╱": "g", "╲": "g", **{ch: "y" for ch in "beph."}}),
+}

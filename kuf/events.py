@@ -158,6 +158,12 @@ def _fields(event: dict | None, n: int) -> dict:
             "n": n, "hour": f"{datetime.now().hour:02d}"}
 
 
+def candidates(kind: str, event: dict | None, n: int, **extra: str) -> list[tuple[str, str]]:
+    """Every (template, filled line) of one kind."""
+    fields = {**_fields(event, n), **extra}
+    return [(t, t.format(**fields)) for t in LINES[kind]]
+
+
 def canned(kind: str, event: dict | None, n: int, seed: str, **extra: str) -> str:
     return pick(LINES[kind], seed).format(**{**_fields(event, n), **extra})
 

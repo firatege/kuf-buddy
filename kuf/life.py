@@ -1,59 +1,53 @@
 """Canned solo lines about what the user is up to right now (song, discord, tabs,
-apps). Three idle lines in four come from here when there's something to talk about."""
+apps). One idle line in ten comes from here when there's something to talk about."""
 
 import zlib
 
-LIFE_ODDS = 4          # 1 in N idle lines ignores the user's life and uses the plain pool
+LIFE_PCT = 10          # share of idle lines about the user's life; the rest use the plain pool
 
 LIFE: dict[str, list[str]] = {
     "song": [
-        "{song} again? bro you got one playlist and it's crying for help.",
-        "ayy {song}. ok that one slaps, i'll allow it.",
-        "turn up {song}, my boy. the couch is vibing.",
-        "{user} coding to {song}. that explains the bugs.",
-        "*nods head to {song}* ...don't look at me.",
-        "who picked {song}? oh right. you, with your questionable taste.",
+        "whatever's in your headphones, it's got you typing like a sad poet.",
+        "this playlist is giving heartbreak, {user}. who hurt you?",
+        "the music says one thing, your commits say another. both kinda sad.",
+        "you only play this stuff when you're in your feelings. i noticed.",
+        "*nods along* ...ok your taste is questionable but the vibe is real.",
+        "music this loud means the bug is winning. i know the signs.",
     ],
     "discord": [
-        "{server} open on discord again? bro, you live there now.",
-        "what's the gossip on {server} tonight? spill it, {user}.",
-        "{user} said 'just checking {server}'. that was an hour ago.",
-        "{server} gang better not be talking shit about me.",
-        "bro you got {server} open but you ain't talking. lurker energy.",
+        "you got that 'the boys are online and i'm pretending to work' energy.",
+        "somebody on that server is having more fun than you. it shows.",
+        "you keep glancing at the server. fomo is a hell of a drug, {user}.",
+        "lurking with the gang instead of shipping. i respect the commitment.",
     ],
     "dm": [
-        "talking to {dm} again? tell 'em the goblin says hi.",
-        "{dm} in the DMs, huh. i see you, {user}.",
-        "what you and {dm} plotting? i'm snitching either way.",
-        "{dm} texting you at this hour? sus as hell, my boy.",
+        "somebody's got you smiling at your phone. don't lie to the goblin.",
+        "that's 'waiting for a reply' energy. i know it well, {user}.",
+        "private chats at this hour? something's cooking and it ain't code.",
+        "you're half here, half in that DM. pick one, my boy.",
     ],
     "youtube": [
-        "\"{video}\"? bro that's not work, that's youtube.",
-        "{user} watching \"{video}\". the code misses you.",
-        "one more video, he said. \"{video}\", he said.",
-        "\"{video}\" huh. put it on the big screen, i'm bored.",
-        "bro learned more from \"{video}\" than from the docs. real.",
+        "that video is not 'research' and we both know it.",
+        "you're one autoplay away from a 3 hour rabbit hole. i'll wait.",
+        "learning from videos instead of docs again. honestly? smart.",
     ],
     "whatsapp": [
-        "{unread} unread on whatsapp and you're here with me. loyalty.",
-        "bro, {unread} messages. somebody wants you. answer 'em.",
-        "{unread} unread? leaving people on read is a lifestyle, huh.",
+        "people are texting you and you're here with me. loyalty or avoidance?",
+        "your phone's got that 'somebody wants something' glow. ignore it. like me.",
+        "leaving everybody on read is a lifestyle, huh. respect.",
     ],
     "github": [
-        "github tab open. stalking other people's repos again, {user}?",
-        "starring repos you'll never read. classic {user}.",
-        "bro's on github like it's instagram. respect.",
+        "stalking other people's repos again? comparison is the thief of joy, {user}.",
+        "starring projects you'll never read. we all do it.",
     ],
     "steam": [
-        "steam's open. 'just one game' my ass.",
-        "{user} said today was a work day. steam said otherwise.",
-        "steam in the background, code in the foreground. we all know who wins.",
-        "if you launch a game i want in. i call player two.",
+        "the game launcher is open. the deadline already knows it lost.",
+        "that 'just one match' look on your face? i've seen it before.",
+        "you're working with one eye on the games. i can tell.",
     ],
     "sim companies": [
-        "running a fake company in sim companies instead of the real one. iconic.",
-        "how's the sim companies empire, ceo? stock's up?",
-        "bro's a tycoon in sim companies and broke in real life. relatable.",
+        "running a fake empire to feel in control. relatable, honestly.",
+        "tycoon in the sim, broke in real life. the dream, {user}.",
     ],
 }
 
@@ -82,10 +76,20 @@ def topics(facts: dict) -> list[tuple[str, dict]]:
     return found
 
 
+def wants_life(seed: str) -> bool:
+    """LIFE_PCT% of slots are about the user's life."""
+    return zlib.crc32(f"{seed}|odds".encode()) % 100 < LIFE_PCT
+
+
+def candidates(facts: dict, user: str) -> list[tuple[str, str]]:
+    """Every (template, filled line) about what the user is up to right now."""
+    return [(t, t.format(user=user, **fields)) for kind, fields in topics(facts) for t in LIFE[kind]]
+
+
 def life_line(facts: dict, seed: str, user: str) -> str | None:
-    """A line about the user's life right now, three times in four; None otherwise."""
-    options = topics(facts)
-    if not options or zlib.crc32(f"{seed}|odds".encode()) % LIFE_ODDS == 0:
-        return None
-    kind, fields = _pick(options, f"{seed}|topic")
-    return _pick(LIFE[kind], f"{seed}|line").format(user=user, **fields)
+    """A line about the user's life right now, LIFE_PCT% of the time; None otherwise."""
+    options = candidates(facts, user)
+    return _pick(options, f"{seed}|line")[1] if options and wants_life(seed) else None
+
+
+KIND_OF = {t: kind for kind, lines in LIFE.items() for t in lines}

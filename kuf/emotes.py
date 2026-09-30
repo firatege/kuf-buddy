@@ -3,6 +3,8 @@
 Row order is always: effects/flies, face, body, couch.
 """
 
+import zlib
+
 COUCH = "▐█▄▄▄▄▄▄▄█▌"      # seat; the armrests are added around the body row
 BODY = "/|▓▓▓|\\ ,,"
 SLOUCH = " |▓▓▓|~ ,,"
@@ -176,9 +178,54 @@ EMOTES.update({
 })
 
 IDLE_BY_MOOD = {
-    "comfy": ["chill", "tea", "nap", "phone", "stretch", "game", "eat", "scratch",
+    "comfy": ["chill", "tea", "phone", "stretch", "game", "eat", "scratch",
               "burp", "nosepick"],
     "sleepy": ["sleep", "nap"],
     "grumpy": ["sus", "facepalm"],
     "furious": ["rage"],
 }
+
+from . import looks  # noqa: E402
+from .rooms import ROOMS  # noqa: E402  (rooms replace the couch versions of these emotes)
+
+EMOTES.update(ROOMS)
+EMOTES.update(looks.shared.EMOTES)
+EMOTES.update(looks.SIGNATURES)
+
+# While he's saying something he's awake and doing something that fits the line.
+TALKING = ["chill", "tea", "scratch", "phone", "eat"]
+# Each goblin's own habits (shared moves he likes plus his signature ones) live in looks/.
+LIFE_EMOTES = {"song": ["hype", "love", "chill"], "discord": ["phone", "sus"], "dm": ["phone", "sus"],
+               "youtube": ["phone", "laugh"], "whatsapp": ["phone", "sus"], "github": ["think", "phone"],
+               "steam": ["game"], "sim companies": ["think", "flex"]}
+# First match wins; checked against the lowercased line template.
+LINE_EMOTES = [
+    (("zzz", "*snore", "*mumbles", "*drools", "*rolls over"), "sleep"),
+    (("*burp", "*farts"), "burp"),
+    (("*scratch",), "scratch"),
+    (("*yawns", "stretch", "yawn"), "stretch"),
+    (("*picks", "*sniffs"), "nosepick"),
+    (("chip", "pizza", "fry ", "ate today", "eat", "munchies"), "eat"),
+    (("blunt", "joint", "smoke", "puff", "spark", "420", "lighter"), "smoke"),
+    (("trip", "colors", "woah", "the walls"), "trip"),
+    (("proud", "you're doing aight"), "love"),
+    (("stack overflow", "lemme guess", "judging"), "roast"),
+    (("advice", "ctrl+z", "if it compiles", "you know what goes hard"), "tip"),
+    (("water", "call your mom", "posture", "go to bed", "go sleep", "sleep is free"), "think"),
+]
+
+
+def for_line(template: str, kind: str | None, feeling: str, seed: str, name: str = "") -> str:
+    """An emote that fits what he's saying. `kind` is the life topic, if any."""
+    def pick(options: list[str]) -> str:
+        return options[zlib.crc32(seed.encode()) % len(options)]
+
+    if kind in LIFE_EMOTES:
+        return pick(LIFE_EMOTES[kind])
+    lowered = template.lower()
+    for words, emote in LINE_EMOTES:
+        if any(w in lowered for w in words):
+            return emote
+    if feeling in ("grumpy", "furious"):
+        return pick(IDLE_BY_MOOD[feeling])
+    return pick(looks.habits(name) or TALKING)

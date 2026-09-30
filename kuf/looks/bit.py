@@ -1,0 +1,106 @@
+"""Bit's own animations and habits."""
+
+from ._kit import scene
+
+NAME = "Bit"
+HABITS = ['sus']             # shared emotes he falls back to; his own ones are added too
+ACCEPTS_JOINT = 0.05           # chance he takes the joint when Snoop passes it
+REFUSAL = "is sure it's laced / a government tracker"
+
+TALK = {c: "y" for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!?.,'"}
+COUCH = "▐█▄▄▄▄▄▄▄█▌"
+BLINDS = "  ║▬▬▬▬▬▬▬▬▬║   "
+
+EMOTES: dict[str, dict] = {
+    "bit-tinfoil": scene("tinfoil hat on, antenna picking up the signal they don't want you to hear", [
+        ["   ╱▀▲▀╲        ",
+         "   (◉_◉)        ",
+         "▐▌/|▓▓▓|\\▐▌     ",
+         COUCH],
+        ["   ╱▀▲▀╲ ∿ ∿    ",
+         "   (◉_◉)ﾉ       ",
+         "▐▌/|▓▓▓| ▐▌     ",
+         COUCH],
+        ["   ╱▀✦▀╲∿∿∿BZZT",
+         "   (⊙_⊙)ﾉ       ",
+         "▐▌/|▓▓▓| ▐▌     ",
+         COUCH],
+        ["   ╱▀▲▀╲ ∿      ",
+         "   (◉_◉) they   ",
+         "▐▌/|▓▓▓|\\▐▌ know",
+         COUCH],
+    ], {**TALK, "╱": "m", "▀": "m", "▲": "m", "╲": "m", "✦": "e", "∿": "c"}),
+    "bit-blinds": scene("peeking through the blinds at the van that's been there since tuesday", [
+        ["   *rustle*     ",
+         BLINDS,
+         BLINDS,
+         "  ╨▬▬▬▬▬▬▬▬▬╨   "],
+        ["      ...?      ",
+         "  ║▬▬(◉_◉)▬▬║   ",
+         "  ║▬▬ﾉ▬▬▬ﾉ▬▬║   ",
+         "  ╨▬▬▬▬▬▬▬▬▬╨   "],
+        ["   white van..  ",
+         "  ║▬▬▬▬(◉_◉)║   ",
+         "  ║▬▬▬▬ﾉ▬▬▬ﾉ║   ",
+         "  ╨▬▬▬▬▬▬▬▬▬╨   "],
+        ["  THEY'RE HERE  ",
+         BLINDS,
+         BLINDS,
+         "  ╨▬▬▬▬▬▬▬▬▬╨ ! "],
+    ], {**TALK, "*": "y", "║": "w", "╨": "w", "▬": "m"}),
+    "bit-webcam": scene("taping over the laptop webcam, then taping over the tape", [
+        ["  ┌──●──┐  ...  ",
+         "  │▚▞▚▞▚│ (◉_◉) ",
+         "  └─────┘/|▓▓▓|\\",
+         "  ▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+        ["  ┌──●──┐ﾉ▬    ",
+         "  │▞▚▞▚▞│ (ಠ_ಠ) ",
+         "  └─────┘/|▓▓▓| ",
+         "  ▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+        ["  ┌──▬──┐ﾉ      ",
+         "  │▚▞▚▞▚│ (¬‿¬) ",
+         "  └─────┘/|▓▓▓| ",
+         "  ▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+        ["  ┌─▬▬▬─┐ safe. ",
+         "  │▞▚▞▚▞│ (◉‿◉) ",
+         "  └─────┘/|▓▓▓|\\",
+         "  ▔▔▔▔▔▔▔▔▔▔▔▔▔▔"],
+    ], {**TALK, "┌": "m", "─": "m", "┐": "m", "│": "m", "└": "m", "┘": "m",
+        "▚": "c", "▞": "c", "●": "e", "▬": "y", "▔": "w"}),
+    "bit-corkboard": scene("pinning red string across his conspiracy corkboard until it all connects", [
+        ["        ●   ◆   ",
+         " (◉_◉)ﾉ     ●  ",
+         " /|▓▓▓|  ●     ●",
+         "  hmm...        "],
+        ["        ●───◆   ",
+         " (◉_◉)ﾉ │   ●  ",
+         " /|▓▓▓|  ●─╱   ●",
+         "  the fridge... "],
+        ["        ●───◆───",
+         " (⊙_⊙)ﾉ │╲ ╱●  ╲",
+         " /|▓▓▓|  ●─╳───●",
+         "  ...the cat... "],
+        ["        ●───◆───",
+         " (⊙▽⊙)ﾉ │╲ ╱●──╲",
+         " /|▓▓▓|  ●─╳───●",
+         "IT'S ALL LINKED!"],
+    ], {**TALK, "●": "y", "◆": "c", "─": "e", "│": "e", "╱": "e", "╲": "e", "╳": "e"}),
+    "bit-hide": scene("hiding under the couch, only his eyes showing, trusting no one", [
+        ["   ...          ",
+         "  ▗▄▄▄▄▄▄▄▄▄▖   ",
+         "  ▐█████████▌   ",
+         "  ▘  ◉ ◉    ▝   "],
+        ["                ",
+         "  ▗▄▄▄▄▄▄▄▄▄▖   ",
+         "  ▐█████████▌   ",
+         "  ▘     ◉ ◉ ▝   "],
+        ["  shhh, they're ",
+         "  ▗▄▄▄▄▄▄▄▄▄▖   ",
+         "  ▐█████████▌   ",
+         "  ▘     - - ▝   "],
+        ["   listening!   ",
+         "  ▗▄▄▄▄▄▄▄▄▄▖   ",
+         "  ▐█████████▌   ",
+         "  ▘ ⊙ ⊙     ▝   "],
+    ], {**TALK, "▗": "w", "▄": "w", "▖": "w", "▐": "w", "█": "w", "▌": "w", "▘": "w", "▝": "w"}),
+}

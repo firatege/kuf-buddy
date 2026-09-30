@@ -9,18 +9,18 @@ import zlib
 from pathlib import Path
 from typing import NamedTuple
 
-from . import facts, state
-from .banter import context_for_claude, exchange_over, incoming_reply, last_word
+from . import breaks, clock, crowd, facts, idle, life, looks, relations, session, spotlight, state
+from .banter import (context_for_claude, exchange_cut, exchange_over, incoming_reply,
+                     last_word, numbered, owner_named)
 from .config import set_value, user_name
-from .emotes import EMOTES, IDLE_BY_MOOD
-from .events import TEST_CMD, canned, classify, edit_count, mood, pick, turn_fallback
-from .life import life_line
+from .emotes import EMOTES, IDLE_BY_MOOD, for_line
+from .events import TEST_CMD, candidates, canned, classify, edit_count, mood, pick, turn_fallback
 from .owner import owner_id
 from .render import compose
-from .screen import side_of
+from .screen import adopt_window, side_of, visible_owners
 
 REACTION_TTL_S = 150
-IDLE_SWAP_S = 20    # a new idle line about every 20 s
+IDLE_SWAP_S = 60    # a new idle line about every minute
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 BIN = Path(__file__).resolve().parent.parent / "bin" / "kuf"
 LEGACY_MARKER = "/pet/kuf.py"
@@ -41,10 +41,7 @@ class View(NamedTuple):
     line: str
     mood: str | None = None
     toward: str | None = None   # owner of the neighbor he's talking to; None = look ahead
-
-
-def _owner_named(s: dict, name: str) -> str | None:
-    return next((o for o, b in s["buddies"].items() if b["name"].lower() == name.lower()), None)
+    glow: bool | None = None    # None = glow whenever he's turned toward someone
 
 
 def current_view(s: dict, owner: str, name: str, now: float) -> View:
@@ -53,26 +50,52 @@ def current_view(s: dict, owner: str, name: str, now: float) -> View:
     feeling, kind, trigger = mood(events, now)
     edits = edit_count(events)
     age = now - reaction["ts"] if reaction else float("inf")
-    target = _owner_named(s, reaction.get("to", "")) if reaction and reaction.get("to") else None
+    target = owner_named(s, reaction.get("to", "")) if reaction and reaction.get("to") else None
 
+    outburst = (breaks.view(s, owner, name, now) or spotlight.view(s, owner, name, now)
+                or crowd.view(s, name, now))
+    if outburst:
+        return View(*outburst, mood=feeling)
     if trigger and (not reaction or trigger["ts"] > reaction["ts"]):
         emote = pick(IDLE_BY_MOOD[feeling], str(trigger["ts"]))
         return View(emote, canned(kind, trigger, edits, str(trigger["ts"])), feeling)
-    # A written exchange runs on its own clock: the last word may cut our own line short.
-    closing = last_word(reaction, now)
+    joint = session.view(s, owner, now)
+    if joint:
+        emote, line, facing, glowing = joint
+        return View(emote, line, toward=facing, glow=glowing)
+    # A written exchange runs on its own clock, and ends on both screens once either side moves on.
+    cut = bool(reaction and reaction.get("reply")) and exchange_cut(s, owner, reaction)
+    closing = None if cut else last_word(reaction, now)
     if closing:
         return View(*closing, toward=target)
     reply = incoming_reply(s, owner, name, now)
     if reply:
         return View(reply[0], reply[1], toward=reply[2])
-    if age < REACTION_TTL_S and reaction["emote"] in EMOTES and not exchange_over(reaction, now):
-        return View(reaction["emote"], reaction["line"], toward=target)
+    if (age < REACTION_TTL_S and reaction["emote"] in EMOTES and not cut
+            and not exchange_over(reaction, now)):
+        line = numbered(1, reaction["line"]) if reaction.get("reply") else reaction["line"]
+        return View(reaction["emote"], line, toward=target)
     # Seed with the goblin's name and stagger the switch so terminals don't chant in sync.
     offset = zlib.crc32(name.encode()) % IDLE_SWAP_S
     slot = f"{int((now + offset) // IDLE_SWAP_S)}:{name}"
-    about_life = life_line(facts.cached(state.state_dir() / "facts.json"), slot, user_name())
-    return View(pick(IDLE_BY_MOOD[feeling], slot),
-                about_life or canned(kind, trigger, edits, slot), feeling)
+    about_life = life.candidates(facts.cached(state.state_dir() / "facts.json"), user_name())
+    about_now = clock.candidates(clock.moment(), user_name()) if feeling != "sleepy" else []
+    if about_life and life.wants_life(slot):
+        pool = about_life
+    elif about_now and zlib.crc32(f"{slot}|clock".encode()) % 100 < clock.MOOD_PCT:
+        pool = about_now          # the hour, the day, the season
+    else:
+        pool = candidates(kind, trigger, edits)
+    template, line = idle.line_for_slot(owner, name, slot, now, pool)
+    return View(idle_emote(template, feeling, slot, name), line, feeling)
+
+
+def idle_emote(template: str, feeling: str, slot: str, name: str) -> str:
+    """The move that goes with an idle line: the clock pool names one, else it's guessed."""
+    timed = clock.EMOTE_OF.get(template)
+    if timed and looks.can_use(name, timed):
+        return timed
+    return for_line(template, life.KIND_OF.get(template), feeling, slot, name)
 
 
 def cmd_status() -> None:
@@ -80,9 +103,15 @@ def cmd_status() -> None:
     now = time.time()
     owner = owner_id()
     name = state.register(owner)
+    if state.mark_seen(owner, now):
+        adopt_window(owner)
     view = current_view(state.load(), owner, name, now)
     facing = side_of(owner, view.toward) if view.toward else "right"
-    print(compose(view.emote, view.line, int(now), view.mood, name=name, facing=facing or "right"))
+    s = state.load()
+    other = s["buddies"].get(view.toward, {}).get("name") if view.toward else None
+    print(compose(view.emote, view.line, int(now), view.mood, name=name, facing=facing or "right",
+                  highlight=view.toward is not None if view.glow is None else view.glow,
+                  marker=relations.marker(s, name, other) if other else ""))
 
 
 # ── hooks ──────────────────────────────────────────────────────────────────────
@@ -95,24 +124,46 @@ def hook_post(payload: dict) -> None:
             state.add_event(owner_id(), {"kind": classify(path), "file": path})
     elif tool == "Bash" and TEST_CMD.search(args.get("command", "")):
         state.add_event(owner_id(), {"kind": "win", "cmd": args["command"]})
+        crowd.trigger("win", owner_id())
+    if tool == "Bash":
+        kind = spotlight.classify(args.get("command", ""))
+        if kind:
+            spotlight.trigger(kind, owner_id())
 
 
 def hook_fail(payload: dict) -> None:
     if payload.get("tool_name") == "Bash":
         cmd = (payload.get("tool_input") or {}).get("command", "")
         state.add_event(owner_id(), {"kind": "fail", "cmd": cmd})
+        if TEST_CMD.search(cmd):
+            crowd.trigger("fail", owner_id())
 
 
 def hook_prompt(payload: dict) -> None:
     owner = owner_id()
     state.start_turn(owner)
+    context = context_for_claude(owner)
+    s = state.load()
+    visible = visible_owners(list(s["buddies"]))
+    pending = session.pending(s, owner)       # rolled by `kuf joint` but not written yet
+    if pending:
+        planned = pending
+    elif session.busy(s, time.time()):
+        planned = None                         # let the one on screen finish first
+    else:
+        planned = session.plan(s, owner, visible) or session.plan_banter(s, owner, visible)
+    session.save_plan(owner, planned)
+    extra = session.note(planned)
+    if breaks.on_prompt(owner):
+        extra = f"{extra}\n{breaks.note(state.load(), time.time())}".strip()
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-                                             "additionalContext": context_for_claude(owner)}}))
+                                             "additionalContext": f"{context}\n{extra}" if extra else context}}))
 
 
 def hook_stop(payload: dict) -> None:
     owner = owner_id()
     events, reaction, turn_start = state.view(state.load(), owner)
+    session.anchor(owner)                                  # a joint written this turn starts now
     if reaction and reaction["ts"] >= turn_start and reaction.get("source") == "claude":
         if reaction.get("reply"):
             state.anchor_exchange(owner, reaction["ts"])   # start the back-and-forth now
@@ -212,12 +263,86 @@ def cmd_uninstall_statusline() -> None:
     print("Küf packed his crumbs and left the status line.")
 
 
+def cmd_be(rest: list[str]) -> None:
+    """`kuf be snoop`: pick this terminal's goblin. `kuf be`: who you are, who's free.
+    `kuf be stats` (so `goblin stats` works): the couch stats."""
+    from .buddies import VARIANTS, resolve
+    owner = owner_id()
+    if rest == ["stats"]:
+        cmd_stats()
+        return
+    if rest in (["rnd"], ["random"]):
+        print(f"this terminal is now {state.claim(owner, random_goblin(owner))}.")
+        return
+    if not rest:
+        s = state.load()
+        mine = s["buddies"].get(owner, {}).get("name", "nobody yet")
+        taken = {b["name"] for o, b in s["buddies"].items() if o != owner and not state.is_ghost(b)}
+        print(f"this terminal: {mine}")
+        print("free: " + ", ".join(n for n in VARIANTS if n not in taken and n != mine))
+        print("taken: " + (", ".join(sorted(taken)) or "-"))
+        return
+    wanted = resolve(" ".join(rest))
+    if not wanted:
+        print(f"no goblin called {' '.join(rest)!r}. pick one of: {', '.join(VARIANTS)}")
+        return
+    print(f"this terminal is now {state.claim(owner, wanted)}.")
+
+
+def random_goblin(owner: str) -> str:
+    """Anyone but the one this terminal has now; free goblins first."""
+    import random
+    from .buddies import VARIANTS
+    s = state.load()
+    mine = s["buddies"].get(owner, {}).get("name")
+    taken = {b["name"] for o, b in s["buddies"].items() if o != owner and not state.is_ghost(b)}
+    others = [n for n in VARIANTS if n != mine]
+    free = [n for n in others if n not in taken]
+    return random.choice(free or others)
+
+
+def cmd_stats() -> None:
+    from . import stats
+    print(stats.show(state.load()["buddies"].get(owner_id(), {}).get("name", "")))
+
+
+def cmd_joint(rest: list[str]) -> None:
+    """`kuf joint [goblin]`: roll it now; Claude sees the output and writes it right away."""
+    from .buddies import resolve
+    owner = owner_id()
+    me = state.register(owner)
+    if me != session.HOST:
+        print(f"only {session.HOST} sparks one up. this terminal is {me} (goblin snoop to switch).")
+        return
+    target = resolve(" ".join(rest)) if rest else None
+    if rest and not target:
+        print(f"no goblin called {' '.join(rest)!r}.")
+        return
+    session.force(owner, target)
+    s = state.load()
+    planned = session.plan(s, owner, visible_owners(list(s["buddies"])))
+    if not planned:
+        print(f"rolled. nobody around yet; {session.HOST} passes it on your next message.")
+        return
+    session.save_plan(owner, {**planned, "forced": True})
+    who = planned.get("target") or ", ".join(n for n in dict.fromkeys(planned["order"]) if n != session.HOST)
+    how = " (says no)" if planned["kind"] == "refused" else ""
+    print(f"🌿 rolled: {session.HOST} → {who}{how} · {' › '.join(planned['order'])}")
+    dice = session.dice_line(planned)
+    if dice:
+        print(dice)
+
+
 USAGE = """usage: kuf <command>
   status                 render the status line (reads Claude Code JSON on stdin)
   hook start|post|fail|prompt|stop
   mcp                    run the MCP server on stdio
   preview [emote|--all]  show emotes in your terminal
   say <emote> <line...>  make your goblin say something right now
+  be [goblin]            pick this terminal's goblin (no name: list who's free, rnd: random)
+                         start with one: KUF_GOBLIN=snoop claude
+  joint [goblin]         Snoop passes one on your next message
+  stats                  who smoked what, who talks to whom (also: goblin stats)
   config name <name>     what the goblins call you (default: boss)
   config words_per_sec <n>  reading speed that paces written exchanges (default: 2)
   install-statusline     put Küf in ~/.claude/settings.json (backs it up first)
@@ -242,6 +367,12 @@ def main(argv: list[str] | None = None) -> int:
     elif command == "say" and len(rest) >= 2 and rest[0] in EMOTES:
         state.register(owner_id())
         state.set_reaction(owner_id(), rest[0], " ".join(rest[1:]), source="cli")
+    elif command == "be":
+        cmd_be(rest)
+    elif command == "joint":
+        cmd_joint(rest)
+    elif command == "stats":
+        cmd_stats()
     elif command == "config" and len(rest) == 2:
         print(json.dumps(set_value(rest[0], rest[1]), ensure_ascii=False))
     elif command == "install-statusline":
