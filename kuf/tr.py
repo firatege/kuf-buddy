@@ -5,15 +5,15 @@ LINES: dict[str, list[str]] = {
     "idle": [
         "{user} bi su iç. bana benzemeye başladın.",
         "iyi misin olm? claude rehin aldıysa iki kere kırp gözünü, gelip alırım.",
-        "{user} bi şeyi daha refactor edersen valla evden çıkıyom.",
+        "bi refactor daha yaparsan valla evden çıkıyom {user}.",
         "*göbeğini kaşır* kimse bi şeye dokunmamış. efsane.",
         "minderin altından cips çıktı. benim artık, elini sürme.",
-        "refactor falan boş iş. uzan şöyle. benim gibi.",
+        "refactor mefactor boş iş. uzan şöyle, bak ne güzel.",
         "bu kanepe neler gördü abi, senin kod kadar değil ama.",
         "*geğirir* ...testler beklesin biraz.",
         "son deploy'dan beri duş almadım. pişman da değilim.",
         "bi şey patlarsa dürt beni. öncesinde değil.",
-        "aga en son ne zaman güneş gördün, harbi soruyom.",
+        "en son ne zaman güneş gördün abi, vitamin d diye bi şey var.",
         "{user} oturuşun savaş suçu. dik otur biraz.",
         "yardım ederdim de kalkmak lazım. sal beni.",
         "*dişini karıştırır* ...nerde kalmıştık.",
@@ -35,13 +35,13 @@ LINES: dict[str, list[str]] = {
         "*esner* cuma mı oldu? olmadı mı? siktir.",
         "rüyamda testler geçmiş. kan ter içinde uyandım, kâbus.",
         "burda geçen yıldan kalma patates var. hala yenir valla.",
-        "bana bakma, değişken isimlerini yargılıyom sadece.",
+        "bana bakma, değişken isimlerine bakıp ağlıyom sadece.",
         "minder yine telefonumu yuttu. doymak bilmiyo.",
-        "her 'hızlı fix' dediğinde bi goblin kırıntılarını kaybediyo.",
+        "'iki dakkalık iş' dedin, hava karardı.",
         "dur tahmin edeyim: 'bende çalışıyodu'. klasik.",
-        "sessiz sedasız gurur duyuyom seninle {user}. kimseye deme.",
+        "gizli gizli gurur duyuyom seninle {user}. kimseye deme.",
         "*kaşınır* ...galiba bu kanepede benden başka biri de yaşıyo.",
-        "ctrl+z hayatını düzeltmez reis. ama başlangıç olur.",
+        "ctrl+z hayatını düzeltmez reis. ama bi başlangıç.",
         "bi kestirsene olm. her şeyin ilacı o.",
         "yapılacaklar listen benim veresiye defterimden uzun.",
         "burda hiç çökmeyen tek kişi benim. saygı göster.",
@@ -271,8 +271,10 @@ STYLE = ("DİL: goblin satırlarını (kuf_react line/reply/last_word, kuf_sessi
          "Türkçe yaz, mahalle ağzıyla: ekleri düşür (napıyon, diyom, gelcem, bi, olcak), hitap "
          "'olm/abi/aga/reis', dolgu 'valla/harbi/cidden/oha', argo 'kasma/sal/boş yapma/"
          "ayar/kapak/gebeş/keriz'; küfür (siktir/amk/bok) yerinde, her cümlede değil; 'lan' sadece "
-         "iki kelimelik ünlemde (siktir lan), uzun cümlede yok; 'moruk' yok; "
-         "çeviri kokmasın, kendi esprini yap; karakterin sesi kalsın. küçük harf, kısa. "
+         "iki kelimelik ünlemde (siktir lan), uzun cümlede yok; 'moruk' yok; m'li ikileme sever "
+         "(test mest, refactor mefactor); İngilizce espriyi çevirme, Türkçedeki karşılığını bul "
+         "('hızlı fix' değil 'iki dakkalık iş'); "
+         "karakterin sesi kalsın. küçük harf, kısa. "
          "örnek: 'oha testler geçmiş. abi sen kimsin, bizim çocuğu napdın.'")
 
 WAITING = "*gözü jointte*"
