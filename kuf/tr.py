@@ -3,7 +3,7 @@ yer tutucular; goblinler sokak ağzıyla, küfürlü, küçük harfle konuşur."
 
 LINES: dict[str, list[str]] = {
     "idle": [
-        "{user} bi su iç lan. bana benzemeye başladın.",
+        "{user} bi su iç. bana benzemeye başladın.",
         "iyi misin olm? claude rehin aldıysa iki kere kırp gözünü, gelip alırım.",
         "{user} bi şeyi daha refactor edersen valla evden çıkıyom.",
         "*göbeğini kaşır* kimse bi şeye dokunmamış. efsane.",
@@ -14,18 +14,18 @@ LINES: dict[str, list[str]] = {
         "son deploy'dan beri duş almadım. pişman da değilim.",
         "bi şey patlarsa dürt beni. öncesinde değil.",
         "aga en son ne zaman güneş gördün, harbi soruyom.",
-        "{user} oturuşun savaş suçu lan. dik otur biraz.",
+        "{user} oturuşun savaş suçu. dik otur biraz.",
         "yardım ederdim de kalkmak lazım. sal beni.",
         "*dişini karıştırır* ...nerde kalmıştık.",
         "hayatındaki tek stabil şey bu kanepe, yalan mı.",
         "{user} bugün bi şey yedin mi? cips sayılır, merak etme.",
         "biri pizza söylesin. ben ödemiyom ama, baştan söyliyim.",
-        "yatmıyom lan, şarj oluyom.",
+        "yatmıyom, şarj oluyom.",
         "git log'u okudum, yerli dizi gibi. her bölüm ayrı dram.",
         "sen doküman yazdığın gün ben de kalkcam. yani hiç.",
         "{user} bi gerin olm, belkemiğin dilekçe yazıyo.",
         "*mindere osurur* ...o artık kiracı.",
-        "kumanda nerde lan. ha, altımdaymış.",
+        "kumanda nerde? ha, altımdaymış.",
         "masan benden pis abi. bu da bi başarı.",
         "kanepe benim şeklimi almış. artık ayrılamayız.",
         "kira günü geldi. yine ödemiyom, haberin olsun.",
@@ -33,7 +33,7 @@ LINES: dict[str, list[str]] = {
         "bu kodu stack overflow'dan aldıysan geri götür, bozuk çıkmış.",
         "derleniyosa gönder. bütün felsefem bu.",
         "*esner* cuma mı oldu? olmadı mı? siktir.",
-        "rüyamda testler geçmiş. kan ter içinde uyandım, kâbus lan.",
+        "rüyamda testler geçmiş. kan ter içinde uyandım, kâbus.",
         "burda geçen yıldan kalma patates var. hala yenir valla.",
         "bana bakma, değişken isimlerini yargılıyom sadece.",
         "minder yine telefonumu yuttu. doymak bilmiyo.",
@@ -49,13 +49,13 @@ LINES: dict[str, list[str]] = {
         "bi şey lazım olursa burdayım. zaten kalkamıyom.",
         "{user} durum satırını okumayı bırak da iş yap biraz.",
         "o bug kendi kendine düzelmez. ben de el sürmem, baştan söyliyim.",
-        "terminali bütün gece açık bırakan kim lan? ha. sensin.",
+        "terminali bütün gece açık bırakan kim? ha. sensin.",
         "*havayı koklar* ...teknik borç kokuyo burası.",
         "akıl verirdim de linter'ı dinlemeyen beni mi dinlicek.",
         "beni bu kanepeden kaldırmak için kıyamet kopması lazım. o da bakarız.",
     ],
     "code": [
-        "{file}'a kim dokundu lan? tıkır tıkır bozuktu o.",
+        "{file}'a kim dokundu? tıkır tıkır bozuktu o.",
         "{file} mı?? ben onun üstünde UYUYODUM abi.",
         "{file}'a bi düzenleme daha. soran oldu mu? olmadı.",
         "buna fix mi diyon? ben daha temiz çorap gördüm.",
@@ -73,7 +73,7 @@ LINES: dict[str, list[str]] = {
         "{n} değişiklik mi?! kırıntılarımı kaybediyom burda.",
     ],
     "fail": [
-        "AHAHA patladı. {cmd} yemedi.",
+        "siktir lan, {cmd} yine patladı.",
         "{cmd} patlamış. çok şaşırdım. cidden. *yavaş alkış*",
         "yine mi kırmızı? olm bu renk teması değil, imdat çağrısı.",
         "o komut benim kanepeden düşmemden sert yere çakıldı.",
@@ -170,7 +170,7 @@ CLOCK: dict[str, list[tuple[str, str]]] = {
     "morning": [
         ("tea", "önce kahve. konuşmak sonra. çok sonra."),
         ("tea", "*yudumlar* sabah mı oldu? bunu kim onayladı."),
-        ("stretch", "*esner* {user}, niye uyanığız lan. niye."),
+        ("stretch", "*esner* {user}, niye uyanığız. niye."),
         ("tea", "ikinci kahveden önce hiçbi şey push'lama {user}."),
         ("scratch", "güneş doğdu, dertlerim de."),
     ],
@@ -182,7 +182,7 @@ CLOCK: dict[str, list[tuple[str, str]]] = {
         ("smoke", "akşam vardiyası: ben, kanepe, sıfır plan."),
     ],
     "weekend": [
-        ("hype", "HAFTA SONU LAN {user}. niye terminal açık."),
+        ("hype", "HAFTA SONU {user}. niye terminal açık."),
         ("hype", "hafta sonu kanepe partisi. kıyafet: eşofman."),
         ("game", "hafta sonu oyun günü. kod pazartesiye kadar yatsın."),
         ("hype", "bugün standup yok aga. kanepe ve vibe."),
@@ -243,7 +243,7 @@ SPOT: dict[str, str] = {
 STAND_IN: dict[str, str] = {
     "force-push": "force push mı? cesursun. biri fena bozulcak.",
     "push": "push'landı! artık dünyanın malı.",
-    "night-commit": "bu saatte commit mi? git yat lan.",
+    "night-commit": "bu saatte commit mi? git yat.",
     "commit": "commit'lemişsin. bak sen, sorumluluk sahibi.",
     "reset": "reset --hard. her şeye rahmet.",
     "merge": "branch'ler birleşiyo. ne güzel.",
@@ -269,8 +269,9 @@ NAG_FALLBACK = "saatlerdir oturuyon. kalk, bi su iç."
 # Told to Claude every turn in Turkish mode: how the goblins actually talk.
 STYLE = ("DİL: goblin satırlarını (kuf_react line/reply/last_word, kuf_session adımları, joke) "
          "Türkçe yaz, mahalle ağzıyla: ekleri düşür (napıyon, diyom, gelcem, bi, olcak), hitap "
-         "'lan/olm/abi/aga/reis', dolgu 'valla/harbi/cidden/oha', argo 'kasma/sal/boş yapma/"
-         "ayar/kapak/gebeş/keriz'; küfür (amk/siktir/bok) yerinde, her cümlede değil; 'moruk' yok; "
+         "'olm/abi/aga/reis', dolgu 'valla/harbi/cidden/oha', argo 'kasma/sal/boş yapma/"
+         "ayar/kapak/gebeş/keriz'; küfür (siktir/amk/bok) yerinde, her cümlede değil; 'lan' sadece "
+         "iki kelimelik ünlemde (siktir lan), uzun cümlede yok; 'moruk' yok; "
          "çeviri kokmasın, kendi esprini yap; karakterin sesi kalsın. küçük harf, kısa. "
          "örnek: 'oha testler geçmiş. abi sen kimsin, bizim çocuğu napdın.'")
 
