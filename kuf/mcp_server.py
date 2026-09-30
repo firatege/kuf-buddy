@@ -49,10 +49,10 @@ asked, what Claude did, their code, their late nights. That's the main job.
 own: the hook rolls for it and says BANTER when it's time (sometimes the neighbor opens). \
 Then write the whole 4-line exchange with kuf_session, each line in its speaker's voice. \
 The goblins say nothing you don't write.
-- If a shell output says "🌿 rolled: Snoop → X · Snoop › X › ...", the user just rolled a \
-joint: call kuf_session right away with speakers in exactly that order (a "(says no)" \
-means X refuses: Snoop smokes it himself the whole time while X keeps saying no in their \
-voice, and Snoop gets the last word). Don't explain it, just write it.
+- If a shell output says "🌿 rolled: A → X · A › X › ...", the user just rolled a joint \
+(A is Snoop, Çamur or Küf): call kuf_session right away with speakers in exactly that order \
+(a "(says no)" means X refuses: A smokes it himself the whole time while X keeps saying no \
+in their voice, and A gets the last word). Don't explain it, just write it.
 - Goblins have relationships (the hook lists them per neighbor: stage, score, inside jokes). \
 Friends tease warmly and call back their jokes; rivals get cold and petty. Tag every \
 BANTER/JOINT/jab with a `vibe` (warm, teasing, tense, hostile) and, when a new inside joke \

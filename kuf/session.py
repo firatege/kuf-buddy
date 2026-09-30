@@ -15,11 +15,11 @@ import time
 from . import looks, relations, state, stats
 from .banter import NOTICE_S, numbered, reading_s
 
-JOINT_ODDS = 0.15      # share of Snoop's turns where he passes one
+HOSTS = {"Snoop": 0.15, "Çamur": 0.05, "Küf": 0.03}   # who rolls one, and on what share of turns
 BANTER_ODDS = 0.30     # share of turns where two goblins on screen trade a few lines
 BANTER_STEPS = 4
 CALLED_OUT_S = 300     # a neighbor who spoke to you this recently always gets an answer
-HOST = "Snoop"
+HOST = "Snoop"         # the main stoner; the others roll one now and then
 MAX_GUESTS = 3
 ROUNDS = (2, 3)
 MAX_STEPS = 9
@@ -32,7 +32,7 @@ WAITING_FOR = {"banter": "*listening*"}   # what someone waiting his turn shows,
 STACK = 3              # how many of his own lines stay stacked in his bubble
 ROLL_S = 8.0           # Snoop rolls it first while the others watch; then it's lit and they talk
 INTERRUPT_S = 20.0     # a participant's own new line takes over his screen this long
-SMOKING = ("joint", "smoke", "snoop-bong", "snoop-rings", "snoop-roll")   # what Snoop does when turned down
+SMOKING = ("joint", "smoke", "snoop-bong", "snoop-rings", "snoop-roll")   # what the roller does when turned down
 ROLLING = "*rolling one up*"
 
 
@@ -45,7 +45,7 @@ def plan(s: dict, owner: str, visible: set[str] | None, rng: random.Random | Non
     now = time.time() if now is None else now
     me = s["buddies"].get(owner, {}).get("name")
     forced = s["force_joint"].get(owner)
-    if me != HOST or (not forced and rng.random() >= JOINT_ODDS):
+    if me not in HOSTS or (not forced and rng.random() >= HOSTS[me]):
         return None
     neighbors = state.neighbors(s, owner)
     around = sorted(o for o in neighbors if visible is None or o in visible)
@@ -60,7 +60,7 @@ def plan(s: dict, owner: str, visible: set[str] | None, rng: random.Random | Non
 
     def takes_it(name: str) -> bool:
         """Roll the dice: his character's odds, nudged by how he gets along with Snoop."""
-        chance = relations.joint_odds(s, HOST, name, looks.accepts_joint(name))
+        chance = relations.joint_odds(s, me, name, looks.accepts_joint(name))
         roll = rng.random()
         rolls[name] = {"roll": round(roll * 100), "needs": round(chance * 100), "yes": roll < chance}
         return roll < chance
@@ -68,12 +68,12 @@ def plan(s: dict, owner: str, visible: set[str] | None, rng: random.Random | Non
     if not takes_it(target_name):
         return {"kind": "refused", "host": owner, "target": target_name,
                 "why": looks.refusal(target_name), "ts": now, "dice": rolls,
-                "order": [HOST, target_name, HOST, target_name, HOST]}
+                "host_name": me, "order": [me, target_name, me, target_name, me]}
     guests = [target_name] + [neighbors[o]["name"] for o in around
                               if o != target and takes_it(neighbors[o]["name"])]
-    circle = [HOST] + guests[:MAX_GUESTS]
+    circle = [me] + guests[:MAX_GUESTS]
     order = (circle * rng.choice(ROUNDS))[:MAX_STEPS]
-    return {"kind": "session", "host": owner, "order": order, "ts": now, "dice": rolls}
+    return {"kind": "session", "host": owner, "host_name": me, "order": order, "ts": now, "dice": rolls}
 
 
 def plan_banter(s: dict, owner: str, visible: set[str] | None, rng: random.Random | None = None,
@@ -155,15 +155,16 @@ def note(planned: dict | None) -> str:
     if planned["kind"] == "refused":
         why = f" ({planned['why']})" if planned["why"] else ""
         target = planned["target"]
-        return (f"JOINT, REFUSED, instead of kuf_react this turn: Snoop rolls one and offers it to "
-                f"{target}, who won't touch it{why}. Its own kind of conversation: Snoop smokes it "
+        host = planned.get("host_name", HOST)
+        return (f"JOINT, REFUSED, instead of kuf_react this turn: {host} rolls one and offers it to "
+                f"{target}, who won't touch it{why}. Its own kind of conversation: {host} smokes it "
                 f"himself the whole time (more for him), {target} keeps refusing in their own voice. "
                 f"Call kuf_session with exactly {len(planned['order'])} steps, speakers in this order: "
-                f"{' -> '.join(planned['order'])}. Snoop offers, {target} says no, Snoop takes a hit "
-                f"and pushes, {target} refuses harder, Snoop blows smoke and has the last word. For "
+                f"{' -> '.join(planned['order'])}. {host} offers, {target} says no, {host} takes a hit "
+                f"and pushes, {target} refuses harder, {host} blows smoke and has the last word. For "
                 f"{target} use 'nope' or one of their own emotes. Lowercase, short.")
     circle = ", ".join(dict.fromkeys(planned["order"]))
-    return (f"JOINT SESSION instead of kuf_react this turn: Snoop sparks one up and passes it "
+    return (f"JOINT SESSION instead of kuf_react this turn: {planned.get('host_name', HOST)} sparks one up and passes it "
             f"around ({circle}). Call kuf_session with exactly {len(planned['order'])} steps, "
             f"speakers in this order: {' -> '.join(planned['order'])}. Each step is the holder "
             f"taking a hit and saying one line in their own voice, answering the one before, "
@@ -175,18 +176,18 @@ def note(planned: dict | None) -> str:
 DEFAULT_EMOTE = {"session": "joint", "refused": "nope", "banter": "chill"}
 
 
-def default_emote(kind: str, name: str) -> str:
+def default_emote(kind: str, name: str, host: str = HOST) -> str:
     """What a step shows when Claude didn't pick an emote."""
-    return "joint" if kind == "refused" and name == HOST else DEFAULT_EMOTE[kind]
+    return "joint" if kind == "refused" and name == host else DEFAULT_EMOTE[kind]
 
 
-def _emote_for(kind: str, name: str, picked: str | None) -> str:
-    """Claude's pick, except: nobody refusing the joint is shown smoking it, and Snoop,
-    turned down, smokes it himself every step."""
-    if kind == "refused" and name == HOST:
+def _emote_for(kind: str, name: str, picked: str | None, host: str = HOST) -> str:
+    """Claude's pick, except: nobody refusing the joint is shown smoking it, and whoever
+    rolled it, turned down, smokes it himself every step."""
+    if kind == "refused" and name == host:
         return picked if picked in SMOKING else "joint"
     if not picked or (kind == "refused" and picked == "joint"):
-        return default_emote(kind, name)
+        return default_emote(kind, name, host)
     return picked
 
 
@@ -202,12 +203,13 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
     if [n.lower() for n in names] != [n.lower() for n in planned["order"]]:
         return f"steps must follow this order exactly: {' -> '.join(planned['order'])}"
     owners = {b["name"]: o for o, b in s["buddies"].items()}
+    host_name = planned.get("host_name", HOST)
     written = [{"owner": owners.get(canon, ""), "name": canon, "line": step["line"],
-                "emote": _emote_for(planned["kind"], canon, step.get("emote"))}
+                "emote": _emote_for(planned["kind"], canon, step.get("emote"), host_name)}
                for canon, step in zip(planned["order"], steps)]
     if any(not w["owner"] for w in written):
         return "someone in the circle left; nothing was saved"
-    session = {"host": owner, "kind": planned["kind"], "steps": written, "ts": now}
+    session = {"host": owner, "host_name": host_name, "kind": planned["kind"], "steps": written, "ts": now}
 
     def change(cur: dict) -> dict:
         plans = {o: p for o, p in cur["plans"].items() if o != owner}
@@ -221,8 +223,8 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
                    "reactions": {**cur["reactions"], owner: reaction}}
         remembered = _remember(started, written, now, planned["kind"])
         related = relations.record(remembered, planned["order"], planned["kind"], vibe, joke,
-                                   host=HOST, now=now)
-        return stats.after_session(related, planned["kind"], planned["order"], HOST)
+                                   host=host_name, now=now)
+        return stats.after_session(related, planned["kind"], planned["order"], host_name)
 
     state.update(change)
     return None
@@ -301,7 +303,8 @@ def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] |
         # Rolling it: the host works on the joint, everyone else turns to watch. No glow yet.
         if owner == host:
             others = [st["owner"] for st in steps if st["owner"] != owner]
-            return "snoop-roll", ROLLING, others[0] if others else None, False
+            rolling = "snoop-roll" if session.get("host_name", HOST) == HOST else "joint"
+            return rolling, ROLLING, others[0] if others else None, False
         return "chill", WAITING, host, False
     current, clock = len(steps) - 1, 0.0
     for i, span in enumerate(spans):

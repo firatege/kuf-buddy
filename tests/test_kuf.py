@@ -858,7 +858,8 @@ class Rolls(random.Random):
 
 def test_snoop_passes_the_joint_and_personality_decides(monkeypatch):
     s = circle(monkeypatch, "Snoop", "Çamur", "Bit")
-    assert session.plan(s, "t1", None, Rolls(0.0)) is None                       # only Snoop starts one
+    assert session.plan(s, "t2", None, Rolls(0.0)) is None                       # Bit never rolls one
+    assert session.plan(s, "t1", None, Rolls(0.06)) is None                      # Çamur rolls one only 5% of turns
     assert session.plan(s, "t0", None, Rolls(0.99)) is None                      # most turns: no joint
     rng = Rolls(0.0, 0.0, 0.5)                                                # Bit rolls 50 vs 5
     rng.choice = lambda seq: seq[0] if seq and isinstance(seq[0], str) and seq[0].startswith("t") else 2
@@ -1515,3 +1516,28 @@ def test_host_never_wears_his_neighbors_opening_line(monkeypatch):
     session.anchor("t0")
     t0 = state.load()["session"]["anchor"]
     assert session.view(state.load(), "t0", t0 + 1)[1] == "*listening*"     # no joint in a chat
+
+
+
+def test_camur_and_kuf_roll_their_own_now_and_then(monkeypatch):
+    s = circle(monkeypatch, "Çamur", "Kir")
+    planned = session.plan(s, "t0", None, Rolls(0.01, 0.0))
+    assert planned["host_name"] == "Çamur" and planned["order"][0] == "Çamur"
+    assert "Çamur sparks one up" in session.note(planned)
+    refused = session.plan(s, "t0", None, Rolls(0.01, 0.99))
+    assert refused["order"] == ["Çamur", "Kir", "Çamur", "Kir", "Çamur"]
+    session.save_plan("t0", refused)
+    session.start("t0", [{"name": n, "emote": "joint", "line": f"l{i}"} for i, n in enumerate(refused["order"])])
+    emotes_used = [w["emote"] for w in state.load()["session"]["steps"]]
+    assert emotes_used == ["joint", "nope", "joint", "nope", "joint"]          # Çamur smokes it alone
+    assert session.HOSTS["Snoop"] > session.HOSTS["Çamur"] > session.HOSTS["Küf"]
+
+
+def test_joint_command_works_for_every_roller(monkeypatch, capsys):
+    monkeypatch.delenv("KUF_GOBLIN", raising=False)
+    cli.main(["be", "kir"])
+    cli.main(["joint"])
+    assert "only Snoop, Çamur, Küf roll one" in capsys.readouterr().out
+    cli.main(["be", "camur"])
+    cli.main(["joint"])
+    assert "Çamur passes it" in capsys.readouterr().out

@@ -111,9 +111,9 @@ Names work without Turkish letters (`camur`, `les`, `sumuk`, `kuf`). If another 
 
 ### Snoop's joint
 
-On about 15% of Snoop's turns he passes a joint to a goblin on screen, and a dice roll decides, weighted by his character: Çamur 95%, Küf 85%, Kabuk 75%, Leş 70%, Pas 50%, Leke 40%, Kir 30%, Sümük 15%, Balgam 10%, Bit 5%. Nobody is a sure thing either way, and friends of Snoop's roll better. `!joint` prints the rolls (`🎲 Kir 34 (needs ≤30) → no`). Either way it becomes a little conversation Claude writes in everyone's own voice: accepted, it goes around the circle for a few rounds; refused, it's a five-line back-and-forth (offer, no, push, NO, last word). Steps play one after another across the terminals and everyone remembers it.
+On about 15% of Snoop's turns he passes a joint to a goblin on screen (Çamur rolls his own on 5% of his turns, Küf on 3%, when he can be bothered), and a dice roll decides, weighted by his character: Çamur 95%, Küf 85%, Kabuk 75%, Leş 70%, Pas 50%, Leke 40%, Kir 30%, Sümük 15%, Balgam 10%, Bit 5%. Nobody is a sure thing either way, and friends of Snoop's roll better. `!joint` prints the rolls (`🎲 Kir 34 (needs ≤30) → no`). Either way it becomes a little conversation Claude writes in everyone's own voice: accepted, it goes around the circle for a few rounds; refused, it's a five-line back-and-forth (offer, no, push, NO, last word). Steps play one after another across the terminals and everyone remembers it.
 
-Want one now? In Snoop's terminal: `!joint` (or `!joint bit` to pick who), and it happens on your next message.
+Want one now? In Snoop's, Çamur's or Küf's terminal: `!joint` (or `!joint bit` to pick who), and it happens on your next message.
 
 ### Stats
 

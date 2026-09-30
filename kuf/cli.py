@@ -311,8 +311,8 @@ def cmd_joint(rest: list[str]) -> None:
     from .buddies import resolve
     owner = owner_id()
     me = state.register(owner)
-    if me != session.HOST:
-        print(f"only {session.HOST} sparks one up. this terminal is {me} (goblin snoop to switch).")
+    if me not in session.HOSTS:
+        print(f"only {', '.join(session.HOSTS)} roll one. this terminal is {me} (goblin snoop to switch).")
         return
     target = resolve(" ".join(rest)) if rest else None
     if rest and not target:
@@ -322,12 +322,12 @@ def cmd_joint(rest: list[str]) -> None:
     s = state.load()
     planned = session.plan(s, owner, visible_owners(list(s["buddies"])))
     if not planned:
-        print(f"rolled. nobody around yet; {session.HOST} passes it on your next message.")
+        print(f"rolled. nobody around yet; {me} passes it on your next message.")
         return
     session.save_plan(owner, {**planned, "forced": True})
-    who = planned.get("target") or ", ".join(n for n in dict.fromkeys(planned["order"]) if n != session.HOST)
+    who = planned.get("target") or ", ".join(n for n in dict.fromkeys(planned["order"]) if n != me)
     how = " (says no)" if planned["kind"] == "refused" else ""
-    print(f"🌿 rolled: {session.HOST} → {who}{how} · {' › '.join(planned['order'])}")
+    print(f"🌿 rolled: {me} → {who}{how} · {' › '.join(planned['order'])}")
     dice = session.dice_line(planned)
     if dice:
         print(dice)
