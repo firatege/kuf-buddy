@@ -171,7 +171,7 @@ kuf install-statusline | uninstall-statusline
 
 ## Updating
 
-Hooks and the status line run fresh code every time. The MCP server lives as long as the Claude Code session, so it watches kuf's own files: when they change, it finishes the request it's on and re-execs itself in place (same pipe, same PID) and tells Claude Code the tool list changed. Every open terminal picks up a new version on its next reaction, no `/mcp` reconnect needed. The shared state file also keeps sections and memories it doesn't recognize, so a terminal on older code can't wipe what newer code wrote.
+Hooks and the status line run fresh code every time. The MCP server is a thin loop that only frames JSON-RPC messages: each request is answered by a fresh `kuf mcp-one` process, so it always runs the current code, and when kuf's files change the loop tells Claude Code the tool list changed. No `/mcp` reconnect needed after an update. The shared state file also keeps sections and memories it doesn't recognize, so a terminal on older code can't wipe what newer code wrote.
 
 ## Personality
 

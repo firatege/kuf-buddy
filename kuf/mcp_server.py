@@ -3,6 +3,7 @@ speak as the status-line goblins. Standard library only."""
 
 import json
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -252,10 +253,10 @@ def handle(message: dict) -> dict | None:
 
 
 PACKAGE = Path(__file__).resolve().parent
-RESUMED = "KUF_MCP_RESUMED"
-
-
 STAMP_EVERY_S = 2.0    # how often to look for new kuf code between messages
+CALL_TIMEOUT_S = 20.0
+TOOLS_CHANGED = {"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}
+BIN = PACKAGE.parent / "bin" / "kuf"
 
 
 def code_stamp() -> float:
@@ -266,77 +267,60 @@ def code_stamp() -> float:
         return 0.0
 
 
-def _lines(stdin):
-    """Incoming lines. The real stdin is read unbuffered, so re-exec'ing between
-    messages can't swallow one that was already read ahead."""
+def answer(raw: str) -> dict | None:
+    """The reply to one raw JSON-RPC line (None for notifications)."""
     try:
-        fd = stdin.fileno()
-    except (AttributeError, OSError, ValueError):
-        yield from stdin
-        return
-    chunk = bytearray()
-    while True:
-        byte = os.read(fd, 1)
-        if not byte:
-            if chunk:
-                yield chunk.decode("utf-8", "replace")
-            return
-        chunk += byte
-        if byte == b"\n":
-            yield chunk.decode("utf-8", "replace")
-            chunk = bytearray()
+        message = json.loads(raw)
+        if not isinstance(message, dict):
+            raise ValueError("not a JSON-RPC object")
+    except ValueError:
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "parse error"}}
+    try:
+        return handle(message)
+    except Exception as exc:  # keep the server alive no matter what
+        return {"jsonrpc": "2.0", "id": message.get("id"),
+                "error": {"code": -32603, "message": str(exc)}}
 
 
-PENDING = "KUF_MCP_PENDING"
+def answer_fresh(raw: str) -> dict | None:
+    """answer() in a new Python process, so every request runs kuf's current code."""
+    try:
+        done = subprocess.run([sys.executable, str(BIN), "mcp-one"], input=raw,
+                              capture_output=True, text=True, timeout=CALL_TIMEOUT_S)
+        out = done.stdout.strip()
+        return json.loads(out) if out else None
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        try:
+            msg_id = json.loads(raw).get("id")
+        except (ValueError, AttributeError):
+            msg_id = None
+        return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": -32603, "message": f"kuf: {exc}"}}
 
 
-def _restart(pending: str = "") -> None:
-    """Swap in the new code without dropping the connection: stdin/stdout survive exec.
-    A message already read is handed over, so the new code answers it."""
-    env = {**os.environ, RESUMED: "1"}
-    if pending:
-        env[PENDING] = pending
-    os.execve(sys.executable, [sys.executable, *sys.argv], env)
+def serve(stdin=sys.stdin, stdout=sys.stdout, run=answer_fresh) -> None:
+    """Long-lived JSON-RPC loop. It only frames messages; `run` answers each one (by
+    default in a fresh process), and a list_changed notice goes out when kuf's code
+    changes, since the tools list (emotes) comes from the code."""
+    stamp, checked = code_stamp(), time.monotonic()
+    # Servers from before this design re-exec'd into new code, handing over the request
+    # they had read and expecting a tools-changed notice: honor that once.
+    def send(message: dict | None) -> None:
+        if message is not None:
+            stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
+            stdout.flush()
 
-
-def _incoming(stdin):
-    """A message handed over by the process we replaced comes first."""
-    pending = os.environ.pop(PENDING, "")
-    if pending:
-        yield pending
-    yield from _lines(stdin)
-
-
-def serve(stdin=sys.stdin, stdout=sys.stdout, restart=_restart) -> None:
-    started, checked = code_stamp(), time.monotonic()
-    if os.environ.pop(RESUMED, None):
-        # Came back on newer code: the tool list (emotes, tools) may have changed.
-        stdout.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}) + "\n")
-        stdout.flush()
-    for raw in _incoming(stdin):
+    if os.environ.pop("KUF_MCP_RESUMED", None):
+        send(TOOLS_CHANGED)
+    handed = os.environ.pop("KUF_MCP_PENDING", "")
+    if handed:
+        send(run(handed))
+    for raw in stdin:
         if not raw.strip():
             continue
+        send(run(raw))
         if time.monotonic() - checked >= STAMP_EVERY_S:
             checked = time.monotonic()
-            updated = code_stamp() > started
-        else:
-            updated = False
-        if updated:
-            restart(raw)   # kuf was updated: let the new code answer this one
-            return
-        try:
-            message = json.loads(raw)
-            if not isinstance(message, dict):
-                raise ValueError("not a JSON-RPC object")
-        except ValueError:
-            reply = {"jsonrpc": "2.0", "id": None,
-                     "error": {"code": -32700, "message": "parse error"}}
-        else:
-            try:
-                reply = handle(message)
-            except Exception as exc:  # keep the server alive no matter what
-                reply = {"jsonrpc": "2.0", "id": message.get("id"),
-                         "error": {"code": -32603, "message": str(exc)}}
-        if reply is not None:
-            stdout.write(json.dumps(reply, ensure_ascii=False) + "\n")
-            stdout.flush()
+            newest = code_stamp()
+            if newest > stamp:
+                stamp = newest
+                send(TOOLS_CHANGED)

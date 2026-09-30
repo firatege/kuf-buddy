@@ -377,6 +377,11 @@ def main(argv: list[str] | None = None) -> int:
     elif command == "mcp":
         from .mcp_server import serve
         serve()
+    elif command == "mcp-one":             # one JSON-RPC request on stdin, its reply on stdout
+        from .mcp_server import answer
+        reply = answer(sys.stdin.read())
+        if reply is not None:
+            print(json.dumps(reply, ensure_ascii=False))
     elif command == "preview":
         cmd_preview(rest)
     elif command == "say" and len(rest) >= 2 and rest[0] in EMOTES:

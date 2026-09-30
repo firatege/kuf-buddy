@@ -173,9 +173,10 @@ def test_owner_is_found_by_walking_up_to_claude(monkeypatch):
 # ── MCP server ─────────────────────────────────────────────────────────────────
 
 def mcp(*messages):
+    from kuf.mcp_server import answer
     stdin = io.StringIO("".join(json.dumps(m) + "\n" for m in messages))
     stdout = io.StringIO()
-    serve(stdin, stdout)
+    serve(stdin, stdout, run=answer)           # in-process, so monkeypatches apply
     return [json.loads(line) for line in stdout.getvalue().splitlines()]
 
 
@@ -1182,42 +1183,25 @@ def test_state_keeps_keys_and_memories_it_does_not_know(monkeypatch):
     assert loaded["history"]["Zort"][0]["said"] == "hi"
 
 
-def test_mcp_server_hands_a_request_to_the_new_code_when_kuf_changes(monkeypatch):
+def test_mcp_server_says_tools_changed_when_kuf_code_changes(monkeypatch):
     from kuf import mcp_server
-    stamps = iter([1.0, 1.0, 2.0])                       # start, before msg 1, before msg 2 (updated)
+    stamps = iter([1.0, 1.0, 2.0])                       # start, after msg 1, after msg 2 (updated)
     monkeypatch.setattr(mcp_server, "code_stamp", lambda: next(stamps))
-    monkeypatch.setattr(mcp_server, "STAMP_EVERY_S", 0)   # look every message in the test
-    handed = []
-    msgs = [json.dumps({"jsonrpc": "2.0", "id": i, "method": "ping"}) + "\n" for i in (1, 2)]
+    monkeypatch.setattr(mcp_server, "STAMP_EVERY_S", 0)
+    msgs = "".join(json.dumps({"jsonrpc": "2.0", "id": i, "method": "ping"}) + "\n" for i in (1, 2))
     stdout = io.StringIO()
-    mcp_server.serve(io.StringIO("".join(msgs)), stdout, restart=handed.append)
-    assert len(stdout.getvalue().splitlines()) == 1        # old code answered only the first
-    assert handed == [msgs[1]]                              # the second goes to the new process
+    mcp_server.serve(io.StringIO(msgs), stdout, run=mcp_server.answer)
+    out = [json.loads(line) for line in stdout.getvalue().splitlines()]
+    assert [m.get("id") for m in out] == [1, 2, None]
+    assert out[-1]["method"] == "notifications/tools/list_changed"
 
 
-def test_new_process_answers_the_handed_over_request_first(monkeypatch):
+def test_each_request_runs_in_a_fresh_process_with_current_code():
     from kuf import mcp_server
-    monkeypatch.setenv(mcp_server.PENDING, json.dumps({"jsonrpc": "2.0", "id": 7, "method": "ping"}) + "\n")
-    stdout = io.StringIO()
-    mcp_server.serve(io.StringIO(""), stdout, restart=lambda raw: None)
-    assert json.loads(stdout.getvalue().splitlines()[0])["id"] == 7
-
-
-def test_resumed_server_tells_the_client_tools_changed(monkeypatch):
-    from kuf import mcp_server
-    monkeypatch.setenv(mcp_server.RESUMED, "1")
-    stdout = io.StringIO()
-    mcp_server.serve(io.StringIO(""), stdout, restart=lambda raw: None)
-    assert "notifications/tools/list_changed" in stdout.getvalue()
-    assert mcp_server.RESUMED not in os.environ
-
-
-def test_unbuffered_reader_reads_real_fds(tmp_path):
-    from kuf import mcp_server
-    path = tmp_path / "in"
-    path.write_text('{"a": 1}\n{"b": 2}\n')
-    with open(path) as handle:
-        assert list(mcp_server._lines(handle)) == ['{"a": 1}\n', '{"b": 2}\n']
+    reply = mcp_server.answer_fresh(json.dumps({"jsonrpc": "2.0", "id": 5, "method": "tools/list"}))
+    assert reply["id"] == 5 and {t["name"] for t in reply["result"]["tools"]} >= {"kuf_react", "kuf_session"}
+    broken = mcp_server.answer_fresh("{not json")
+    assert broken["error"]["code"] == -32700
 
 
 # ── relationships ──────────────────────────────────────────────────────────────
@@ -1619,3 +1603,13 @@ def test_prompt_hook_writes_the_state_once(monkeypatch):
     monkeypatch.setattr(cli, "context_for_claude", lambda owner: "ctx")
     cli.hook_prompt({})
     assert len(writes) == 1 and state.load()["turns"]["term-a"]
+
+
+def test_a_request_handed_over_by_an_old_server_still_gets_answered(monkeypatch):
+    from kuf import mcp_server
+    monkeypatch.setenv("KUF_MCP_PENDING", json.dumps({"jsonrpc": "2.0", "id": 9, "method": "ping"}) + "\n")
+    monkeypatch.setenv("KUF_MCP_RESUMED", "1")
+    stdout = io.StringIO()
+    mcp_server.serve(io.StringIO(""), stdout, run=mcp_server.answer)
+    out = [json.loads(line) for line in stdout.getvalue().splitlines()]
+    assert out[0]["method"] == "notifications/tools/list_changed" and out[1]["id"] == 9
