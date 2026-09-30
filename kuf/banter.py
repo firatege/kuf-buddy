@@ -10,9 +10,6 @@ from .screen import describe_neighbors
 
 WORDS_PER_S = 2.0      # relaxed reading speed; `kuf config words_per_sec <n>`
 NOTICE_S = 2.0         # a beat to spot the new line, often in another terminal
-REPLY_DELAY_MIN_S, REPLY_DELAY_MAX_S = 4.0, 14.0
-LAST_WORD_DELAY_MAX_S = 28.0
-EXCHANGE_S = 60        # how long the finished exchange stays up before both close
 ANCHOR_WAIT_S = 120    # give up waiting for the turn to end after this long
 CONTEXT_S = 900        # how old a neighbor's line can be and still be mentioned to Claude
 SNIPPET = 40
@@ -42,90 +39,13 @@ def reading_s(line: str) -> float:
     return NOTICE_S + len(line.split()) / _words_per_sec()
 
 
-def exchange_start(reaction: dict, now: float) -> float | None:
-    """When the exchange clock starts: the end of the turn that wrote it.
-
-    Claude calls kuf_react before writing its answer; starting the reply then means
-    it plays out while the user is still reading. None = the turn is still running.
-    """
-    if reaction.get("anchor"):
-        return reaction["anchor"]
-    if reaction.get("source") != "claude" or now - reaction["ts"] > ANCHOR_WAIT_S:
-        return reaction["ts"]
-    return None
-
-
-def reply_delay(reaction: dict) -> float:
-    """The reply lands once the jab has had time to be read."""
-    return min(max(reading_s(reaction["line"]), REPLY_DELAY_MIN_S), REPLY_DELAY_MAX_S)
-
-
-def last_word_delay(reaction: dict) -> float:
-    reply = reaction.get("reply") or {}
-    return min(reply_delay(reaction) + reading_s(reply.get("line", "")), LAST_WORD_DELAY_MAX_S)
-
-
 def numbered(n: int, line: str) -> str:
     """'2› line': the order to read a conversation in, since its bubbles sit side by side."""
     return f"{n}› {line}"
 
 
-def exchange_end(reaction: dict) -> float:
-    """Seconds after the start when both sides of the exchange close, together."""
-    return last_word_delay(reaction) + EXCHANGE_S
-
-
-def exchange_over(reaction: dict | None, now: float) -> bool:
-    if not reaction or not reaction.get("reply"):
-        return False
-    start = exchange_start(reaction, now)
-    return start is not None and now - start >= exchange_end(reaction)
-
-
 def owner_named(s: dict, name: str) -> str | None:
     return next((o for o, b in s["buddies"].items() if b["name"].lower() == name.lower()), None)
-
-
-def exchange_cut(s: dict, jabber: str, reaction: dict) -> bool:
-    """Either side did something since the jab (a new line or a reaction to an edit,
-    a failure, a test run): the exchange is over on both screens at once."""
-    target = owner_named(s, reaction.get("to", ""))
-    ts = reaction.get("anchor") or reaction["ts"]      # the writing turn's own commands don't count
-    theirs = state.owned(s, target, "reactions") if target else None
-    if theirs and theirs["ts"] > ts:
-        return True
-    return state.moved_on(s, {jabber, target}, ts)
-
-
-def _aimed_at(reaction: dict, name: str) -> bool:
-    return reaction.get("to", "").lower() == name.lower()
-
-
-def incoming_reply(s: dict, owner: str, my_name: str, now: float) -> tuple[str, str, str] | None:
-    """(emote, line, their owner): a reply another terminal's Claude wrote for us."""
-    for other, buddy in state.neighbors(s, owner).items():
-        reaction = buddy["reaction"]
-        if not reaction or not reaction.get("reply") or not _aimed_at(reaction, my_name):
-            continue
-        if exchange_cut(s, other, reaction):
-            continue
-        start = exchange_start(reaction, now)
-        delay = reply_delay(reaction)
-        if start is not None and delay <= now - start < exchange_end(reaction):
-            return reaction["reply"]["emote"], numbered(2, reaction["reply"]["line"]), other
-    return None
-
-
-def last_word(reaction: dict | None, now: float) -> tuple[str, str] | None:
-    """Our closing line after the target had its say, stacked under our jab so the
-    whole exchange stays readable."""
-    if not reaction or not reaction.get("last_word"):
-        return None
-    start = exchange_start(reaction, now)
-    delay = last_word_delay(reaction)
-    if start is not None and delay <= now - start < exchange_end(reaction):
-        return reaction["last_word"]["emote"], f'{numbered(1, reaction["line"])}\n{numbered(3, reaction["last_word"]["line"])}'
-    return None
 
 
 def topic_note(life: str, roll: float | None = None) -> str:
@@ -159,7 +79,7 @@ def recall(s: dict, name: str, now: float) -> str:
     for m in state.memories(s, name)[-RECALL:]:
         when = _ago(now - m["ts"])
         if m.get("session"):
-            what = {"banter": "chat", "refused": "turned-down joint"}.get(m.get("kind"), "joint")
+            what = {"banter": "chat", "jab": "chat", "refused": "turned-down joint"}.get(m.get("kind"), "joint")
             others = [line for line in m["session"] if not line.startswith(f"{name}:")]
             last = ""
             if others:
@@ -175,6 +95,15 @@ def recall(s: dict, name: str, now: float) -> str:
     if not lines:
         return ""
     return "Your recent lines (call back to them, never repeat one):\n" + "\n".join(lines)
+
+
+def _jab_at(s: dict, host: str, name: str, now: float) -> dict | None:
+    """A jab `host` threw at `name` recently, if any."""
+    jab = s.get("sessions", {}).get(host)
+    if jab and jab["kind"] == "jab" and now - jab["ts"] < CONTEXT_S and \
+            any(step["name"] == name for step in jab["steps"][1:2]):
+        return jab
+    return None
 
 
 def context_for_claude(owner: str) -> str:
@@ -199,11 +128,11 @@ def context_for_claude(owner: str) -> str:
     for other, buddy in others.items():
         reaction = buddy["reaction"]
         said = ""
-        if reaction and now - reaction["ts"] < CONTEXT_S:
-            ago = int(now - reaction["ts"])
-            said = f' — {ago}s ago said "{_snippet(reaction["line"])}"'
-            if reaction.get("to", "").lower() == name.lower():
-                said += " (TO YOU)"
+        jab = _jab_at(s, other, name, now)
+        if jab:
+            said = f' — {int(now - jab["ts"])}s ago said "{_snippet(jab["steps"][0]["line"])}" (TO YOU)'
+        elif reaction and now - reaction["ts"] < CONTEXT_S:
+            said = f' — {int(now - reaction["ts"])}s ago said "{_snippet(reaction["line"])}"'
         trait = VARIANTS.get(buddy["name"], VARIANTS["Küf"])["trait"]
         lines.append(f"- {buddy['name']} ({trait}) {labels[other]}{said} · "
                      f"{relations.describe(s, name, buddy['name'])}")

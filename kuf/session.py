@@ -14,12 +14,12 @@ import time
 from typing import NamedTuple
 
 from . import looks, relations, state, stats
-from .banter import ANCHOR_WAIT_S, NOTICE_S, _aimed_at, numbered, reading_s
+from .banter import ANCHOR_WAIT_S, NOTICE_S, numbered, owner_named, reading_s
+from .buddies import resolve
 
 HOSTS = {"Snoop": 0.15, "Çamur": 0.05, "Küf": 0.03}   # who rolls one, and on what share of turns
 BANTER_ODDS = 0.30     # share of turns where two goblins on screen trade a few lines
 BANTER_STEPS = 4
-CALLED_OUT_S = 300     # a neighbor who spoke to you this recently always gets an answer
 HOST = "Snoop"         # the main stoner; the others roll one now and then
 MAX_GUESTS = 3
 ROUNDS = (2, 3)
@@ -85,13 +85,10 @@ def plan_banter(s: dict, owner: str, visible: set[str] | None, rng: random.Rando
     around = sorted(o for o in neighbors if visible is None or o in visible)
     if not me or not around:
         return None
-    callers = [o for o in around if (r := neighbors[o]["reaction"]) and now - r["ts"] < CALLED_OUT_S
-               and _aimed_at(r, me)]
-    if not callers and rng.random() >= BANTER_ODDS:
+    if rng.random() >= BANTER_ODDS:
         return None
-    other = callers[0] if callers else rng.choice(around)
-    them = neighbors[other]["name"]
-    first, second = (me, them) if callers or rng.random() < 0.5 else (them, me)
+    them = neighbors[rng.choice(around)]["name"]
+    first, second = (me, them) if rng.random() < 0.5 else (them, me)
     order = [first, second] * (BANTER_STEPS // 2)
     return {"kind": "banter", "host": owner, "with": them, "opener": first, "order": order, "ts": now}
 
@@ -113,14 +110,15 @@ def pending(s: dict, owner: str, now: float | None = None) -> dict | None:
 
 def busy(s: dict, now: float) -> bool:
     """A written session hasn't finished playing (or hasn't started yet)."""
-    session = s.get("session")
-    if not session or _cut(s, session):
-        return False
-    start_at = _start(session, now)
-    if start_at is None:
-        return True
-    total = intro_s(session) + sum(durations(session["steps"])) + LINGER_S
-    return now - start_at < total
+    for session in s.get("sessions", {}).values():
+        if _cut(s, session):
+            continue
+        start_at = _start(session, now)
+        if start_at is None:
+            return True
+        if now - start_at < intro_s(session) + sum(durations(session["steps"])) + LINGER_S:
+            return True
+    return False
 
 
 def force(owner: str, target: str | None = None) -> None:
@@ -186,6 +184,7 @@ KINDS = {
     "session": Kind("joint", WAITING, ROLL_S, False),
     "refused": Kind("nope", WAITING, ROLL_S, True),
     "banter": Kind("chill", "*listening*", 0.0, False),
+    "jab": Kind("chill", "*listening*", 0.0, False),     # kuf_react's to/reply/last_word
 }
 
 
@@ -211,22 +210,42 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
     names = [step["name"] for step in steps]
     if [n.lower() for n in names] != [n.lower() for n in planned["order"]]:
         return f"steps must follow this order exactly: {' -> '.join(planned['order'])}"
-    owners = {b["name"]: o for o, b in s["buddies"].items()}
     host_name = planned.get("host_name", HOST)
-    written = [{"owner": owners.get(canon, ""), "name": canon, "line": step["line"],
-                "emote": _emote_for(planned["kind"], canon, step.get("emote"), host_name)}
-               for canon, step in zip(planned["order"], steps)]
+    return _commit(s, owner, planned["kind"], host_name,
+                   [{**step, "name": canon} for canon, step in zip(planned["order"], steps)],
+                   now, vibe, joke)
+
+
+def start_jab(owner: str, target: str, steps: list[dict], now: float | None = None,
+              vibe: str | None = None, joke: str | None = None) -> str | None:
+    """A jab from kuf_react: [me, them, me], played like any other session."""
+    now = time.time() if now is None else now
+    s = state.load()
+    me = s["buddies"].get(owner, {}).get("name")
+    them = resolve(target)
+    if not me or not them or not owner_named(s, them):
+        return f"{target} isn't around to answer; nothing was saved"
+    named = [{**step, "name": who} for who, step in zip((me, them, me), steps)]
+    return _commit(s, owner, "jab", me, named, now, vibe, joke)
+
+
+def _commit(s: dict, owner: str, kind: str, host_name: str, steps: list[dict], now: float,
+            vibe: str | None, joke: str | None) -> str | None:
+    """Store a written session (and what it does to memories, relationships and stats)."""
+    written = [{"owner": owner_named(s, step["name"]) or "", "name": step["name"], "line": step["line"],
+                "emote": _emote_for(kind, step["name"], step.get("emote"), host_name)}
+               for step in steps]
     if any(not w["owner"] for w in written):
         return "someone in the circle left; nothing was saved"
-    session = {"host": owner, "host_name": host_name, "kind": planned["kind"], "steps": written, "ts": now}
+    order = [w["name"] for w in written]
+    played = {"host": owner, "host_name": host_name, "kind": kind, "steps": written, "ts": now}
 
     def change(cur: dict) -> dict:
         plans = {o: p for o, p in cur["plans"].items() if o != owner}
-        started = {**cur, "plans": plans, "session": session}
-        remembered = _remember(started, written, now, planned["kind"])
-        related = relations.record(remembered, planned["order"], planned["kind"], vibe, joke,
-                                   host=host_name, now=now)
-        return stats.after_session(related, planned["kind"], planned["order"], host_name)
+        started = {**cur, "plans": plans, "sessions": {**cur.get("sessions", {}), owner: played}}
+        remembered = _remember(started, written, now, kind)
+        related = relations.record(remembered, order, kind, vibe, joke, host=host_name, now=now)
+        return stats.after_session(related, kind, order, host_name)
 
     state.update(change)
     return None
@@ -246,10 +265,10 @@ def _remember(s: dict, steps: list[dict], now: float, kind: str = "session") -> 
 def anchor(owner: str) -> None:
     """The turn that wrote the session ended: start the clock now."""
     def change(s: dict) -> dict:
-        session = s.get("session")
-        if not session or session["host"] != owner or session.get("anchor"):
+        session = s.get("sessions", {}).get(owner)
+        if not session or session.get("anchor"):
             return s
-        return {**s, "session": {**session, "anchor": time.time()}}
+        return {**s, "sessions": {**s["sessions"], owner: {**session, "anchor": time.time()}}}
 
     state.update(change)
 
@@ -288,10 +307,14 @@ def intro_s(session: dict) -> float:
 
 
 def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] | None:
-    """(emote, line, owner he faces, glowing) while this terminal is in a running session."""
-    session = s.get("session")
-    if not session or owner not in {step["owner"] for step in session["steps"]}:
-        return None
+    """(emote, line, owner he faces, glowing) while this terminal is in a running session;
+    the newest one wins if he's in several."""
+    mine = sorted((x for x in s.get("sessions", {}).values()
+                   if owner in {step["owner"] for step in x["steps"]}), key=lambda x: -x["ts"])
+    return next((shown for x in mine if (shown := _view_one(s, x, owner, now))), None)
+
+
+def _view_one(s: dict, session: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] | None:
     # Swapped goblins mid-session (`goblin rnd`): the new one doesn't inherit the old one's joint.
     mine_now = s["buddies"].get(owner, {}).get("name")
     if mine_now not in {step["name"] for step in session["steps"] if step["owner"] == owner}:
@@ -332,5 +355,5 @@ def view(s: dict, owner: str, now: float) -> tuple[str, str, str | None, bool] |
 
 def written_by(s: dict, owner: str, since: float) -> bool:
     """This terminal's Claude wrote a session at or after `since`."""
-    session = s.get("session")
-    return bool(session) and session["host"] == owner and session["ts"] >= since
+    session = s.get("sessions", {}).get(owner)
+    return bool(session) and session["ts"] >= since

@@ -22,7 +22,7 @@ MEMORY_LINES = 12      # what each goblin remembers saying, kept across terminal
 SAID_CAP = 60          # idle lines remembered per goblin for the no-repeat cooldowns
 CMD_CAP = 120          # commands are stored this short in events
 PLAN_KEEP_S = 3600     # plans, sessions and rolled joints are dropped after this
-LEGACY = ("crowd", "spotlight", "spotlight_last", "nag")   # keys older versions wrote
+LEGACY = ("crowd", "spotlight", "spotlight_last", "nag", "session")   # keys older versions wrote
 SEEN_EVERY_S = 10      # how often a status line stamps "still here"
 GHOST_S = 60           # no status line for this long = a ghost (process alive, nobody drawing it)
 GHOST_PRUNE_S = 600
@@ -38,7 +38,7 @@ def state_file() -> Path:
 
 def empty_state() -> dict:
     return {"events": [], "reactions": {}, "turns": {}, "buddies": {}, "history": {},
-            "idle": {}, "said": {}, "plans": {}, "session": None,
+            "idle": {}, "said": {}, "plans": {}, "sessions": {},
             "force_joint": {}}
 
 
@@ -83,7 +83,7 @@ def _prune(s: dict, now: float) -> dict:
         "said": {n: [x for x in said if now - x["ts"] < STALE_S][-SAID_CAP:]
                  for n, said in s["said"].items()},
         "plans": {o: p for o, p in s["plans"].items() if is_alive(o) and now - p["ts"] < PLAN_KEEP_S},
-        "session": s["session"] if s["session"] and now - s["session"]["ts"] < PLAN_KEEP_S else None,
+        "sessions": {o: x for o, x in s["sessions"].items() if now - x["ts"] < PLAN_KEEP_S},
         "force_joint": {o: f for o, f in s["force_joint"].items() if is_alive(o) and now - f["ts"] < PLAN_KEEP_S},
     }
 
@@ -135,10 +135,8 @@ def add_event(owner: str, event: dict) -> dict:
     return update(lambda s: {**s, "events": s["events"] + [stamped]})
 
 
-def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
-                 reply: dict | None = None, last_word: dict | None = None) -> dict:
-    reaction = {"emote": emote, "line": line, "source": source, "to": to,
-                "reply": reply, "last_word": last_word, "ts": time.time()}
+def set_reaction(owner: str, emote: str, line: str, source: str) -> dict:
+    reaction = {"emote": emote, "line": line, "source": source, "ts": time.time()}
 
     def change(s: dict) -> dict:
         me = s["buddies"].get(owner, {}).get("name")
@@ -149,38 +147,15 @@ def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
 
 
 def remember(s: dict, name: str, reaction: dict) -> dict:
-    """Both sides of a written exchange go into the speakers' memories."""
-    ts = reaction["ts"]
-    to = resolve(reaction.get("to", "")) or reaction.get("to", "")
-    memories = {name: {"ts": ts, "said": reaction["line"], "to": to}}
-    if to and reaction.get("reply"):
-        memories = {name: {**memories[name], "they_said": reaction["reply"]["line"],
-                           "then": (reaction.get("last_word") or {}).get("line", "")},
-                    to: {"ts": ts, "heard": reaction["line"], "from": name,
-                         "said": reaction["reply"]["line"]}}
-    history = dict(s["history"])
-    for who, memory in memories.items():
-        if who in VARIANTS:
-            history[who] = (history.get(who, []) + [memory])[-MEMORY_LINES:]
-    return {**s, "history": history}
+    """A line Claude wrote goes into its goblin's memory (conversations: session._remember)."""
+    if name not in VARIANTS:
+        return s
+    memory = {"ts": reaction["ts"], "said": reaction["line"]}
+    return {**s, "history": {**s["history"], name: (s["history"].get(name, []) + [memory])[-MEMORY_LINES:]}}
 
 
 def memories(s: dict, name: str) -> list[dict]:
     return s["history"].get(name, [])
-
-
-def anchor_exchange(owner: str, reaction_ts: float) -> dict:
-    """Mark when the turn that wrote this reaction finished, so the written reply and
-    last word play out after the user has read Claude's answer, not while it's typing."""
-    now = time.time()
-
-    def change(s: dict) -> dict:
-        reaction = s["reactions"].get(owner)
-        if not reaction or reaction["ts"] != reaction_ts:
-            return s
-        return {**s, "reactions": {**s["reactions"], owner: {**reaction, "anchor": now}}}
-
-    return update(change)
 
 
 def turn(s: dict, owner: str, now: float) -> dict:

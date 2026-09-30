@@ -30,6 +30,11 @@ def kuf_home(tmp_path, monkeypatch):
     return tmp_path
 
 
+def latest() -> dict:
+    """The most recently written session."""
+    return max(state.load()["sessions"].values(), key=lambda x: x["ts"])
+
+
 def use_owner(monkeypatch, name):
     monkeypatch.setenv("KUF_OWNER", name)
     owner.owner_id.cache_clear()
@@ -251,27 +256,6 @@ def test_direction_from_niri_layout(theirs, expected):
     assert screen.direction(win(1, 2, 2), theirs) == expected
 
 
-def test_neighbor_lines_get_no_canned_answer(monkeypatch):
-    monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the right (api)" for o in others})
-    b_name = state.register("term-b")
-    a_name = state.register("term-a")
-    state.set_reaction("term-b", "roast", "yo, your code sucks", source="claude", to=a_name)
-
-    view = cli.current_view(state.load(), "term-a", a_name, time.time())
-    assert view.toward is None and b_name not in view.line
-
-
-def test_claude_gets_told_who_it_voices_and_who_said_what(monkeypatch):
-    monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the left (web)" for o in others})
-    state.register("term-b")
-    me = state.register("term-a")
-    state.set_reaction("term-b", "roast", "lmao that diff", source="claude", to=me)
-
-    note = banter.context_for_claude("term-a")
-    assert f"You voice {me}" in note
-    assert "on the left (web)" in note and "lmao that diff" in note and "(TO YOU)" in note
-
-
 def test_prompt_hook_emits_additional_context():
     out = run_bin("hook", "prompt", stdin="{}").stdout
     ctx = json.loads(out)["hookSpecificOutput"]["additionalContext"]
@@ -301,37 +285,6 @@ def test_idle_goblins_dont_all_say_the_same_thing():
 
 
 # ── written exchanges ──────────────────────────────────────────────────────────
-
-def test_jab_with_reply_plays_out_across_both_terminals(monkeypatch):
-    a_name, b_name = state.register("term-a"), state.register("term-b")
-    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
-        "name": "kuf_react", "arguments": {
-            "emote": "roast", "line": f"yo {b_name}, your tests are fake", "to": b_name,
-            "reply": {"emote": "rage", "line": "fake? at least i HAVE tests"},
-            "last_word": {"emote": "laugh", "line": "one test. it asserts True."}}}}
-    mcp(call)                                   # sent from term-a
-    t_call = state.load()["reactions"]["term-a"]["ts"]
-    assert "HAVE tests" not in cli.current_view(state.load(), "term-b", b_name, t_call + 30)[1]
-    cli.hook_stop({})                           # Claude finished writing its answer
-    t0 = state.load()["reactions"]["term-a"]["anchor"]
-
-    def shown(owner, name, dt):
-        return cli.current_view(state.load(), owner, name, t0 + dt)[1]
-
-    assert shown("term-a", a_name, 1) == f"1› yo {b_name}, your tests are fake"
-    assert "HAVE tests" not in shown("term-b", b_name, 1)        # reply waits a beat
-    reaction = state.load()["reactions"]["term-a"]
-    reply_at, last_at = banter.reply_delay(reaction), banter.last_word_delay(reaction)
-    assert shown("term-b", b_name, reply_at + 0.1) == "2› fake? at least i HAVE tests"
-    assert shown("term-a", a_name, last_at - 0.1) == f"1› yo {b_name}, your tests are fake"
-    # the last word stacks under the jab instead of replacing it
-    assert shown("term-a", a_name, last_at + 0.1) == f"1› yo {b_name}, your tests are fake\n3› one test. it asserts True."
-    end = banter.exchange_end(reaction)
-    assert shown("term-b", b_name, end - 0.1) == "2› fake? at least i HAVE tests"
-    # ...and both sides close together
-    assert "fake" not in shown("term-a", a_name, end + 0.1)
-    assert "HAVE tests" not in shown("term-b", b_name, end + 0.1)
-
 
 @pytest.mark.parametrize("extra", [
     {},                                                               # no reply, no last word
@@ -381,31 +334,6 @@ def test_visible_windows_grow_from_the_active_column_until_the_monitor_is_full()
     assert screen.visible_window_ids(windows, workspaces, outputs) == {3, 4}
 
 
-def test_exchange_pace_follows_line_length():
-    short = {"line": "your tests are fake", "reply": {"line": "nah"}}
-    long_ = {"line": " ".join(["word"] * 18), "reply": {"line": " ".join(["word"] * 40)}}
-    assert banter.reply_delay(short) == banter.REPLY_DELAY_MIN_S
-    assert banter.reply_delay(short) < banter.reply_delay(long_) <= banter.REPLY_DELAY_MAX_S
-    assert banter.last_word_delay(short) < 8
-    assert banter.last_word_delay(long_) == banter.LAST_WORD_DELAY_MAX_S
-
-
-def test_reading_speed_is_configurable():
-    line = {"line": " ".join(["w"] * 12), "reply": {"line": "x"}}
-    before = banter.reply_delay(line)
-    config.set_value("words_per_sec", "12")
-    assert banter.reply_delay(line) < before
-    config.set_value("words_per_sec", "banana")
-    assert banter.reply_delay(line) == before
-
-
-def test_exchange_falls_back_to_call_time_if_the_turn_never_ends():
-    reaction = {"ts": 100.0, "source": "claude", "line": "x", "reply": {"emote": "sus", "line": "y"}}
-    assert banter.exchange_start(reaction, 150.0) is None
-    assert banter.exchange_start(reaction, 100.0 + banter.ANCHOR_WAIT_S + 1) == 100.0
-    assert banter.exchange_start({**reaction, "source": "cli"}, 101.0) == 100.0
-
-
 # ── facing ─────────────────────────────────────────────────────────────────────
 
 def test_mirror_flips_direction_and_keeps_rows_aligned():
@@ -415,15 +343,6 @@ def test_mirror_flips_direction_and_keeps_rows_aligned():
     assert flipped[1] == ",,▐▌/|▓▓▓|\\▐▌"
     assert len({render.width(r) for r in flipped}) == 1
     assert render.mirror(render.mirror(["(•̀ᴗ•́)☝"]))[0].strip() == "(•̀ᴗ•́)☝"
-
-
-def test_goblin_faces_the_neighbor_he_talks_to_and_looks_ahead_otherwise(monkeypatch):
-    a_name, b_name = state.register("term-a"), state.register("term-b")
-    state.set_reaction("term-b", "roast", "hey", source="cli", to=a_name,
-                       reply={"emote": "rage", "line": "what"})
-    t = state.load()["reactions"]["term-b"]["ts"]
-    assert cli.current_view(state.load(), "term-a", a_name, t + 10).toward == "term-b"
-    assert cli.current_view(state.load(), "term-a", a_name, t + 500).toward is None
 
 
 def test_left_facing_layout_puts_bubble_first_with_tail_toward_him():
@@ -489,22 +408,6 @@ def test_duplicate_names_are_given_to_free_goblins(monkeypatch):
     buddies_now = state.load()["buddies"]
     assert buddies_now["old"]["name"] == "Kir"
     assert buddies_now["new"]["name"] not in ("Kir",) and buddies_now["new"]["name"] in buddies.VARIANTS
-
-
-def test_both_goblins_remember_a_written_exchange():
-    a_name, b_name = state.register("term-a"), state.register("term-b")
-    mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
-        "name": "kuf_react", "arguments": {
-            "emote": "roast", "line": "your tests are fake", "to": b_name.lower(),
-            "reply": {"emote": "rage", "line": "at least i HAVE tests"},
-            "last_word": {"emote": "laugh", "line": "one test. asserts True."}}}})
-    s = state.load()
-    mine, theirs = state.memories(s, a_name)[-1], state.memories(s, b_name)[-1]
-    assert mine["said"] == "your tests are fake" and mine["then"] == "one test. asserts True."
-    assert theirs["heard"] == "your tests are fake" and theirs["from"] == a_name
-
-    note = banter.context_for_claude("term-b")
-    assert "your tests are fake" in note and "at least i HAVE tests" in note
 
 
 def distinct(i: int) -> str:
@@ -632,33 +535,6 @@ def jab_from_a(b_name: str) -> float:
                        reply={"emote": "rage", "line": "at least i HAVE tests"},
                        last_word={"emote": "laugh", "line": "one test. asserts True."})
     return state.load()["reactions"]["term-a"]["ts"]
-
-
-@pytest.mark.parametrize("who_moves_on", ["term-a", "term-b"])
-def test_exchange_ends_on_both_screens_when_either_side_moves_on(monkeypatch, who_moves_on):
-    monkeypatch.setattr(state, "is_alive", lambda owner: True)
-    a_name, b_name = state.register("term-a"), state.register("term-b")
-    t = jab_from_a(b_name)
-    reaction = state.load()["reactions"]["term-a"]
-    mid = t + banter.last_word_delay(reaction) + 1
-    assert "HAVE tests" in cli.current_view(state.load(), "term-b", b_name, mid).line
-    assert "asserts True" in cli.current_view(state.load(), "term-a", a_name, mid).line
-
-    state.add_event(who_moves_on, {"kind": "code", "file": "/x/main.py"})
-    later = time.time() + 1
-    assert "HAVE tests" not in cli.current_view(state.load(), "term-b", b_name, later).line
-    assert "tests are fake" not in cli.current_view(state.load(), "term-a", a_name, later).line
-
-
-def test_target_saying_something_new_cuts_the_exchange(monkeypatch):
-    monkeypatch.setattr(state, "is_alive", lambda owner: True)
-    a_name, b_name = state.register("term-a"), state.register("term-b")
-    t = jab_from_a(b_name)
-    time.sleep(0.01)
-    state.set_reaction("term-b", "chill", "anyway, back to work", source="cli")
-    now = t + 8
-    assert cli.current_view(state.load(), "term-b", b_name, now).line == "anyway, back to work"
-    assert "tests are fake" not in cli.current_view(state.load(), "term-a", a_name, now).line
 
 
 def test_talking_goblins_glow_white():
@@ -888,8 +764,8 @@ def test_written_session_plays_step_by_step_and_everyone_remembers(monkeypatch):
              {"name": "Snoop", "emote": "joint", "line": "then we all family, man"}]
     assert session.start("t0", steps) is None
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"] + session.ROLL_S          # after rolling it
-    spans = session.durations(state.load()["session"]["steps"])
+    t0 = latest()["anchor"] + session.ROLL_S          # after rolling it
+    spans = session.durations(latest()["steps"])
     at = lambda owner, dt: session.view(state.load(), owner, t0 + dt)
     assert at("t0", 1)[1] == "1› puff puff, smooth" and at("t0", 1)[2] == "t1"
     assert at("t1", 1) == ("chill", session.WAITING, "t0", True)
@@ -906,7 +782,7 @@ def test_session_ends_for_everyone_when_one_moves_on(monkeypatch):
     session.save_plan("t0", {"kind": "session", "host": "t0", "order": ["Snoop", "Çamur"], "ts": time.time()})
     session.start("t0", [{"name": "Snoop", "emote": "joint", "line": "a"}, {"name": "Çamur", "emote": "joint", "line": "b"}])
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     assert session.view(state.load(), "t1", t0 + 1)
     state.add_event("t1", {"kind": "code", "file": "/x.py"})
     assert session.view(state.load(), "t0", t0 + 1) is None
@@ -985,7 +861,7 @@ def test_refusal_is_a_back_and_forth_and_the_refuser_says_nope(monkeypatch):
     session.save_plan("t0", planned)
     steps = [{"name": n, "emote": "joint", "line": f"line {i}"} for i, n in enumerate(planned["order"])]
     assert session.start("t0", steps) is None
-    written = state.load()["session"]["steps"]
+    written = latest()["steps"]
     assert [w["emote"] for w in written] == ["joint", "nope", "joint", "nope", "joint"]
 
 
@@ -1016,8 +892,8 @@ def test_everyone_in_the_circle_glows_even_on_the_last_step(monkeypatch):
                              "order": ["Snoop", "Bit", "Snoop"], "ts": time.time()})
     session.start("t0", [{"name": n, "emote": "joint", "line": f"l{i}"} for i, n in enumerate(["Snoop", "Bit", "Snoop"])])
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
-    spans = session.durations(state.load()["session"]["steps"])
+    t0 = latest()["anchor"]
+    spans = session.durations(latest()["steps"])
     last = t0 + sum(spans[:2]) + 0.5
     assert session.view(state.load(), "t0", last)[2] == "t1"          # faces Bit -> glows
     assert session.view(state.load(), "t1", last)[2] == "t0"
@@ -1034,13 +910,6 @@ def test_banter_rolls_thirty_percent_and_either_side_can_open(monkeypatch):
     assert session.plan_banter(s, "t0", set(), Rolls(0.0)) is None             # nobody on screen
 
 
-def test_a_neighbor_who_called_you_out_always_gets_an_answer(monkeypatch):
-    circle(monkeypatch, "Kir", "Leke")
-    state.set_reaction("t1", "roast", "kir you fraud", source="claude", to="Kir")
-    planned = session.plan_banter(state.load(), "t0", None, Rolls(0.99))
-    assert planned and planned["order"][0] == "Kir"
-
-
 def test_banter_plays_like_a_session_with_chill_by_default(monkeypatch):
     circle(monkeypatch, "Kir", "Leke")
     use_owner(monkeypatch, "t0")
@@ -1049,7 +918,7 @@ def test_banter_plays_like_a_session_with_chill_by_default(monkeypatch):
         "steps": [{"name": "Kir", "line": "a"}, {"name": "Leke", "emote": "leke-faint", "line": "b"},
                   {"name": "Kir", "emote": "leke-faint", "line": "c"}, {"name": "Leke", "line": "d"}]}}})[0]["result"]
     assert not out["isError"]
-    emotes_used = [w["emote"] for w in state.load()["session"]["steps"]]
+    emotes_used = [w["emote"] for w in latest()["steps"]]
     assert emotes_used == ["chill", "leke-faint", "chill", "chill"]          # Kir can't borrow Leke's move
 
 
@@ -1075,7 +944,7 @@ def test_claudes_own_commands_in_the_writing_turn_dont_cut_the_session(monkeypat
     state.add_event("t0", {"kind": "win", "cmd": "pytest"})      # same turn, before it ends
     time.sleep(0.01)
     session.anchor("t0")                                          # turn ends, playback starts
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     assert session.view(state.load(), "t1", t0 + 1)
     time.sleep(0.01)
     state.add_event("t1", {"kind": "code", "file": "/x.py"})     # after it started: that cuts
@@ -1088,8 +957,8 @@ def test_session_lines_glow_face_each_other_and_stack(monkeypatch):
     session.start("t0", [{"name": n, "line": l} for n, l in
                          [("Snoop", "one"), ("Kabuk", "two"), ("Snoop", "three"), ("Kabuk", "four")]])
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"] + session.ROLL_S
-    spans = session.durations(state.load()["session"]["steps"])
+    t0 = latest()["anchor"] + session.ROLL_S
+    spans = session.durations(latest()["steps"])
     third = t0 + sum(spans[:2]) + 0.5
     view = cli.current_view(state.load(), "t0", "Snoop", third)
     assert view.toward == "t1"                        # glows and faces Kabuk
@@ -1129,7 +998,7 @@ def test_snoop_rolls_it_first_while_the_others_watch_without_glowing(monkeypatch
     session.save_plan("t0", {"kind": "session", "host": "t0", "order": ["Snoop", "Çamur"], "ts": time.time()})
     session.start("t0", [{"name": "Snoop", "line": "lit"}, {"name": "Çamur", "line": "bro"}])
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     snoop = cli.current_view(state.load(), "t0", "Snoop", t0 + 2)
     camur = cli.current_view(state.load(), "t1", "Çamur", t0 + 2)
     assert (snoop.emote, snoop.line, snoop.glow) == ("snoop-roll", session.ROLLING, False)
@@ -1144,7 +1013,7 @@ def test_banter_skips_the_rolling(monkeypatch):
                              "order": ["Kir", "Leke"], "ts": time.time()})
     session.start("t0", [{"name": "Kir", "line": "sup"}, {"name": "Leke", "line": "darling"}])
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     assert session.view(state.load(), "t0", t0 + 0.5)[1] == "1› sup"
 
 
@@ -1155,7 +1024,7 @@ def test_no_new_roll_while_a_session_is_still_playing(monkeypatch):
     session.start("t0", [{"name": "Snoop", "line": "a"}, {"name": "Çamur", "line": "b"}])
     assert session.busy(state.load(), time.time())                   # written, not played yet
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     assert session.busy(state.load(), t0 + 3)
     assert not session.busy(state.load(), t0 + 600)
     session.save_plan("t0", {"kind": "banter", "host": "t0", "order": ["Snoop", "Çamur"], "ts": time.time()})
@@ -1170,7 +1039,7 @@ def test_turned_down_snoop_smokes_it_himself(monkeypatch):
     session.start("t0", [{"name": "Snoop", "emote": "flex", "line": "a"},
                          {"name": "Bit", "emote": "bit-tinfoil", "line": "b"},
                          {"name": "Snoop", "emote": "snoop-rings", "line": "c"}])
-    assert [w["emote"] for w in state.load()["session"]["steps"]] == ["joint", "bit-tinfoil", "snoop-rings"]
+    assert [w["emote"] for w in latest()["steps"]] == ["joint", "bit-tinfoil", "snoop-rings"]
     assert session.ROLL_S == 8.0
 
 
@@ -1500,7 +1369,7 @@ def test_host_never_wears_his_neighbors_opening_line(monkeypatch):
                          {"name": "Kir", "line": "k2"}, {"name": "Snoop", "line": "s2"}])
     assert "t0" not in state.load()["reactions"]          # no stand-in line for the host at all
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     assert session.view(state.load(), "t0", t0 + 1)[1] == "*listening*"     # no joint in a chat
 
 
@@ -1514,7 +1383,7 @@ def test_camur_and_kuf_roll_their_own_now_and_then(monkeypatch):
     assert refused["order"] == ["Çamur", "Kir", "Çamur", "Kir", "Çamur"]
     session.save_plan("t0", refused)
     session.start("t0", [{"name": n, "emote": "joint", "line": f"l{i}"} for i, n in enumerate(refused["order"])])
-    emotes_used = [w["emote"] for w in state.load()["session"]["steps"]]
+    emotes_used = [w["emote"] for w in latest()["steps"]]
     assert emotes_used == ["joint", "nope", "joint", "nope", "joint"]          # Çamur smokes it alone
     assert session.HOSTS["Snoop"] > session.HOSTS["Çamur"] > session.HOSTS["Küf"]
 
@@ -1553,7 +1422,7 @@ def test_swapping_goblins_mid_session_drops_the_old_ones_joint(monkeypatch):
                              "order": ["Snoop", "Çamur"], "ts": time.time()})
     session.start("t0", [{"name": "Snoop", "line": "a"}, {"name": "Çamur", "line": "b"}])
     session.anchor("t0")
-    t0 = state.load()["session"]["anchor"]
+    t0 = latest()["anchor"]
     assert session.view(state.load(), "t0", t0 + 1)
     state.claim("t0", "Pas")
     assert session.view(state.load(), "t0", t0 + 1) is None          # Pas isn't smoking Snoop's joint
@@ -1580,8 +1449,7 @@ def test_stop_hook_starts_a_session_written_this_turn_without_a_fallback(monkeyp
     session.start("t0", [{"name": "Snoop", "line": "a"}, {"name": "Kir", "line": "b"}])
     state.add_event("t0", {"kind": "win", "cmd": "pytest"})       # would normally earn a fallback line
     cli.hook_stop({})
-    s = state.load()
-    assert s["session"].get("anchor") and "t0" not in s["reactions"]
+    assert latest().get("anchor") and "t0" not in state.load()["reactions"]
 
 
 def test_only_one_terminal_refreshes_the_facts_at_a_time(tmp_path, monkeypatch):
@@ -1627,3 +1495,104 @@ def test_a_rolled_joint_and_idle_line_belong_to_the_goblin_not_the_terminal(monk
     assert session.pending(s, "term-a") and state.owned(s, "term-a", "force_joint") is None  # plan consumed the force
     state.claim("term-a", "Kir")
     assert session.pending(state.load(), "term-a") is None             # Kir didn't roll it
+
+
+
+# ── jabs are sessions too ──────────────────────────────────────────────────────
+
+def jab(a_name, b_name, **extra):
+    return mcp({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {
+        "name": "kuf_react", "arguments": {
+            "emote": "roast", "line": f"yo {b_name}, your tests are fake", "to": b_name,
+            "reply": {"emote": "rage", "line": "fake? at least i HAVE tests"},
+            "last_word": {"emote": "laugh", "line": "one test. it asserts True."}, **extra}}})[0]["result"]
+
+
+def test_a_jab_plays_out_across_both_terminals_like_any_session(monkeypatch):
+    monkeypatch.setattr(state, "is_alive", lambda owner: True)
+    a_name, b_name = state.register("term-a"), state.register("term-b")
+    assert not jab(a_name, b_name)["isError"]
+    played = latest()
+    assert played["kind"] == "jab" and [w["name"] for w in played["steps"]] == [a_name, b_name, a_name]
+    cli.hook_stop({})                                               # the writing turn ends: it starts
+    t0 = latest()["anchor"]
+    spans = session.durations(latest()["steps"])
+    shown = lambda owner, name, dt: cli.current_view(state.load(), owner, name, t0 + dt)
+    assert shown("term-a", a_name, 1).line == f"1› yo {b_name}, your tests are fake"
+    assert shown("term-b", b_name, 1).line == "*listening*"
+    assert shown("term-b", b_name, spans[0] + 0.5).line == "2› fake? at least i HAVE tests"
+    last = shown("term-a", a_name, sum(spans[:2]) + 0.5)
+    assert last.line == f"1› yo {b_name}, your tests are fake\n3› one test. it asserts True."
+    assert last.toward == "term-b" and last.glow                     # faces b, glows
+    assert shown("term-a", a_name, sum(spans) + session.LINGER_S + 1).toward is None   # over, looks ahead
+
+
+def test_a_jab_ends_for_both_when_either_side_moves_on(monkeypatch):
+    monkeypatch.setattr(state, "is_alive", lambda owner: True)
+    a_name, b_name = state.register("term-a"), state.register("term-b")
+    jab(a_name, b_name)
+    session.anchor("term-a")
+    t0 = latest()["anchor"]
+    time.sleep(0.01)
+    state.add_event("term-b", {"kind": "code", "file": "/x.py"})
+    assert session.view(state.load(), "term-a", t0 + 1) is None
+    assert session.view(state.load(), "term-b", t0 + 1) is None
+
+
+def test_a_jab_needs_someone_to_answer_and_is_remembered_by_both(monkeypatch):
+    monkeypatch.setattr(state, "is_alive", lambda owner: True)
+    a_name = state.register("term-a")
+    out = jab(a_name, "Balgam")
+    assert out["isError"] and "isn't around" in out["content"][0]["text"]
+    b_name = state.register("term-b")
+    jab(a_name, b_name.lower(), vibe="teasing")                      # names match loosely
+    s = state.load()
+    mine, theirs = state.memories(s, a_name)[-1], state.memories(s, b_name)[-1]
+    assert mine["said"] == "one test. it asserts True." and theirs["said"] == "fake? at least i HAVE tests"
+    assert relations.get(s, a_name, b_name)["score"] == relations.VIBES["teasing"]
+
+
+def test_claude_is_told_a_neighbor_jabbed_it(monkeypatch):
+    monkeypatch.setattr(state, "is_alive", lambda owner: True)
+    monkeypatch.setattr(banter, "describe_neighbors", lambda me, others: {o: "on the left (web)" for o in others})
+    b_name = state.register("term-b")
+    me = state.register("term-a")
+    use_owner(monkeypatch, "term-b")
+    jab(b_name, me)
+    note = banter.context_for_claude("term-a")
+    assert f"You voice {me}" in note and "on the left (web)" in note
+    assert "your tests are fake" in note and "(TO YOU)" in note
+
+
+def test_a_neighbors_solo_line_gets_no_canned_answer(monkeypatch):
+    b_name = state.register("term-b")
+    a_name = state.register("term-a")
+    state.set_reaction("term-b", "roast", "yo, your code sucks", source="claude")
+    view = cli.current_view(state.load(), "term-a", a_name, time.time())
+    assert view.toward is None and b_name not in view.line
+
+
+def test_sessions_are_kept_per_host_so_a_jab_cant_wipe_a_joint(monkeypatch):
+    circle(monkeypatch, "Snoop", "Çamur", "Kir")
+    session.save_plan("t0", {"kind": "session", "host": "t0", "host_name": "Snoop",
+                             "order": ["Snoop", "Çamur"], "ts": time.time()})
+    session.start("t0", [{"name": "Snoop", "line": "puff"}, {"name": "Çamur", "line": "bro"}])
+    use_owner(monkeypatch, "t2")
+    jab("Kir", "Snoop")
+    assert set(state.load()["sessions"]) == {"t0", "t2"}
+
+
+def test_pace_follows_line_length_and_reading_speed():
+    short = [{"line": "nah"}]
+    long_ = [{"line": " ".join(["word"] * 30)}]
+    assert session.durations(short)[0] == session.STEP_MIN_S
+    before = session.durations(long_)[0]
+    assert before > session.STEP_MIN_S
+    config.set_value("words_per_sec", "12")
+    assert session.durations(long_)[0] < before
+
+
+def test_a_session_starts_on_its_own_if_the_turn_never_ends():
+    written = {"ts": 100.0, "steps": [], "kind": "banter"}
+    assert session._start(written, 150.0) is None
+    assert session._start(written, 100.0 + banter.ANCHOR_WAIT_S + 1) == 100.0

@@ -10,7 +10,7 @@ from pathlib import Path
 from difflib import SequenceMatcher
 
 from . import looks, relations, session, state
-from .buddies import VARIANTS, resolve
+from .buddies import VARIANTS
 from .emotes import EMOTES
 from .owner import owner_id
 
@@ -166,11 +166,13 @@ def call_tool(name: str, args: dict) -> dict:
     repeat = _repeat_of(line, me)
     if repeat:
         return _text(f'your goblin already said "{repeat}". write something new; nothing was saved', True)
-    state.set_reaction(owner_id(), emote, line, source="claude", to=to,
-                       reply=reply, last_word=closing)
-    other = resolve(to) if to else None
-    if other and me:
-        relations.save([me, other], "banter", _vibe(args.get("vibe")), args.get("joke"))
+    if to:
+        steps = [{"emote": emote, "line": line}, reply, closing]
+        error = session.start_jab(owner_id(), to, steps, vibe=_vibe(args.get("vibe")), joke=args.get("joke"))
+        if error:
+            return _text(error, True)
+    else:
+        state.set_reaction(owner_id(), emote, line, source="claude")
     return _text("ok")
 
 

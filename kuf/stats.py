@@ -19,7 +19,7 @@ def after_session(s: dict, kind: str, order: list[str], host: str) -> dict:
     for name in circle:
         if kind == "session":
             s = bump(s, name, "joints")
-        elif kind == "banter":
+        elif kind in ("banter", "jab"):
             s = bump(s, name, "chats")
         elif kind == "refused":
             s = bump(s, name, "turned_down" if name == host else "refused")

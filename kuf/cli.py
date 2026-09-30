@@ -10,8 +10,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from . import breaks, clock, crowd, facts, idle, life, looks, relations, session, spotlight, state
-from .banter import (context_for_claude, exchange_cut, exchange_over, incoming_reply,
-                     last_word, numbered, owner_named)
+from .banter import context_for_claude
 from .config import set_value, user_name
 from .emotes import EMOTES, IDLE_BY_MOOD, for_line
 from .events import TEST_CMD, candidates, canned, chance, classify, edit_count, mood, pick, turn_fallback
@@ -50,7 +49,6 @@ def current_view(s: dict, owner: str, name: str, now: float) -> View:
     feeling, kind, trigger = mood(events, now)
     edits = edit_count(events)
     age = now - reaction["ts"] if reaction else float("inf")
-    target = owner_named(s, reaction.get("to", "")) if reaction and reaction.get("to") else None
 
     outburst = (breaks.view(s, owner, name, now) or spotlight.view(s, owner, name, now)
                 or crowd.view(s, name, now))
@@ -63,18 +61,8 @@ def current_view(s: dict, owner: str, name: str, now: float) -> View:
     if joint:
         emote, line, facing, glowing = joint
         return View(emote, line, toward=facing, glow=glowing)
-    # A written exchange runs on its own clock, and ends on both screens once either side moves on.
-    cut = bool(reaction and reaction.get("reply")) and exchange_cut(s, owner, reaction)
-    closing = None if cut else last_word(reaction, now)
-    if closing:
-        return View(*closing, toward=target)
-    reply = incoming_reply(s, owner, name, now)
-    if reply:
-        return View(reply[0], reply[1], toward=reply[2])
-    if (age < REACTION_TTL_S and reaction["emote"] in EMOTES and not cut
-            and not exchange_over(reaction, now)):
-        line = numbered(1, reaction["line"]) if reaction.get("reply") else reaction["line"]
-        return View(reaction["emote"], line, toward=target)
+    if age < REACTION_TTL_S and reaction["emote"] in EMOTES:
+        return View(reaction["emote"], reaction["line"])
     # Seed with the goblin's name and stagger the switch so terminals don't chant in sync.
     offset = zlib.crc32(name.encode()) % IDLE_SWAP_S
     slot = f"{int((now + offset) // IDLE_SWAP_S)}:{name}"
@@ -180,8 +168,6 @@ def hook_stop(payload: dict) -> None:
         session.anchor(owner)                              # a joint or chat written this turn starts now
         return
     if reaction and reaction["ts"] >= turn_start and reaction.get("source") == "claude":
-        if reaction.get("reply"):
-            state.anchor_exchange(owner, reaction["ts"])   # start the back-and-forth now
         return
     turn_events = [e for e in events if e["ts"] >= turn_start]
     picked = turn_fallback(turn_events, edit_count(events))
