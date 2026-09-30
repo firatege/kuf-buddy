@@ -141,8 +141,8 @@ def set_reaction(owner: str, emote: str, line: str, source: str, to: str = "",
                 "reply": reply, "last_word": last_word, "ts": time.time()}
 
     def change(s: dict) -> dict:
-        updated = {**s, "reactions": {**s["reactions"], owner: reaction}}
         me = s["buddies"].get(owner, {}).get("name")
+        updated = {**s, "reactions": {**s["reactions"], owner: {**reaction, "name": me}}}
         return remember(updated, me, reaction) if source == "claude" and me else updated
 
     return update(change)
@@ -195,7 +195,7 @@ def start_turn(owner: str) -> dict:
 def view(s: dict, owner: str) -> tuple[list[dict], dict | None, float]:
     """This terminal's (events, last reaction, current turn start)."""
     events = [e for e in s["events"] if e.get("owner") == owner]
-    return events, s["reactions"].get(owner), s["turns"].get(owner, 0.0)
+    return events, owned(s, owner, "reactions"), s["turns"].get(owner, 0.0)
 
 
 def register(owner: str, s: dict | None = None) -> str:
@@ -232,14 +232,26 @@ def claim(owner: str, name: str) -> str:
             if other != owner and buddy["name"] == name:
                 buddies = {**buddies, other: {**buddy, "name": assign(other, taken)}}
                 taken = taken | {buddies[other]["name"]}
-        changed = {o for o in buddies if buddies[o].get("name") != s["buddies"].get(o, {}).get("name")}
-        idle = {o: i for o, i in s["idle"].items() if o not in changed}
-        # a swapped-in goblin doesn't wear the old one's last line either
-        reactions = {o: r for o, r in s["reactions"].items() if o not in changed}
-        return {**s, "buddies": buddies, "idle": idle, "reactions": reactions}
+        return {**s, "buddies": buddies}   # records stamped with the old name stop counting (owned)
 
     buddy = update(change)["buddies"].get(owner)
     return buddy["name"] if buddy else name
+
+
+def owned(s: dict, owner: str, table: str) -> dict | None:
+    """`s[table][owner]`, unless it was written for a goblin this terminal no longer has.
+    Records are stamped with the goblin's name, so swapping goblins (`goblin rnd`)
+    drops the old one's reaction, idle line, plan or rolled joint everywhere at once."""
+    record = s.get(table, {}).get(owner)
+    if not record:
+        return None
+    current = s["buddies"].get(owner, {}).get("name")
+    return record if record.get("name") in (None, current) else None
+
+
+def stamped(s: dict, owner: str, record: dict) -> dict:
+    """`record`, marked as this terminal's current goblin's (see `owned`)."""
+    return {**record, "name": s["buddies"].get(owner, {}).get("name")}
 
 
 def live_names(s: dict, exclude: str | None = None) -> set[str]:
@@ -255,7 +267,7 @@ def moved_on(s: dict, owners: set[str], since: float) -> bool:
 
 def neighbors(s: dict, owner: str) -> dict[str, dict]:
     """Other live terminals' goblins: owner -> {name, reaction}. Ghosts are left out."""
-    return {o: {"name": b["name"], "reaction": s["reactions"].get(o)}
+    return {o: {"name": b["name"], "reaction": owned(s, o, "reactions")}
             for o, b in s["buddies"].items() if o != owner and not is_ghost(b)}
 
 

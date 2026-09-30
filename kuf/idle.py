@@ -46,7 +46,7 @@ def line_for_slot(owner: str, name: str, slot: str, now: float,
                   s: dict | None = None) -> tuple[str, str]:
     """This slot's (template, line), picked once and remembered. `candidates` is only
     called when a new line is needed."""
-    current = (s if s is not None else state.load())["idle"].get(owner)
+    current = state.owned(s if s is not None else state.load(), owner, "idle")
     if current and current["slot"] == slot:
         return current.get("t", ""), current["line"]
     pool = candidates()
@@ -54,12 +54,13 @@ def line_for_slot(owner: str, name: str, slot: str, now: float,
         return "", ""
 
     def change(cur: dict) -> dict:
-        existing = cur["idle"].get(owner)
+        existing = state.owned(cur, owner, "idle")
         if existing and existing["slot"] == slot:
             return cur
         template, text = choose(pool, _last_said(cur, name, now), now, slot)
         said = cur["said"].get(name, []) + [{"t": key(template), "ts": now}]
-        return {**cur, "idle": {**cur["idle"], owner: {"slot": slot, "t": template, "line": text}},
+        entry = state.stamped(cur, owner, {"slot": slot, "t": template, "line": text})
+        return {**cur, "idle": {**cur["idle"], owner: entry},
                 "said": {**cur["said"], name: said}}
 
     picked = state.update(change)["idle"].get(owner, {})

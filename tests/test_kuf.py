@@ -1565,7 +1565,9 @@ def test_swapped_goblin_starts_without_the_old_ones_last_line(monkeypatch):
     state.claim("term-a", "Snoop")
     state.set_reaction("term-a", "joint", "puff puff", source="claude")
     state.claim("term-a", "Pas")
-    assert "term-a" not in state.load()["reactions"]
+    assert state.view(state.load(), "term-a")[1] is None          # Snoop's line doesn't count for Pas
+    state.claim("term-a", "Snoop")
+    assert state.view(state.load(), "term-a")[1]["line"] == "puff puff"   # and it's his again
 
 
 
@@ -1613,3 +1615,15 @@ def test_a_request_handed_over_by_an_old_server_still_gets_answered(monkeypatch)
     mcp_server.serve(io.StringIO(""), stdout, run=mcp_server.answer)
     out = [json.loads(line) for line in stdout.getvalue().splitlines()]
     assert out[0]["method"] == "notifications/tools/list_changed" and out[1]["id"] == 9
+
+
+
+def test_a_rolled_joint_and_idle_line_belong_to_the_goblin_not_the_terminal(monkeypatch):
+    monkeypatch.delenv("KUF_GOBLIN", raising=False)
+    state.claim("term-a", "Snoop")
+    session.force("term-a", None)
+    session.save_plan("term-a", {"kind": "session", "host": "term-a", "order": ["Snoop"], "ts": time.time(), "forced": True})
+    s = state.load()
+    assert session.pending(s, "term-a") and state.owned(s, "term-a", "force_joint") is None  # plan consumed the force
+    state.claim("term-a", "Kir")
+    assert session.pending(state.load(), "term-a") is None             # Kir didn't roll it

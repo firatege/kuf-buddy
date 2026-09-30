@@ -43,7 +43,7 @@ def plan(s: dict, owner: str, visible: set[str] | None, rng: random.Random | Non
     rng = rng or random.Random()
     now = time.time() if now is None else now
     me = s["buddies"].get(owner, {}).get("name")
-    forced = s["force_joint"].get(owner)
+    forced = state.owned(s, owner, "force_joint")
     if me not in HOSTS or (not forced and rng.random() >= HOSTS[me]):
         return None
     neighbors = state.neighbors(s, owner)
@@ -106,7 +106,7 @@ def dice_line(planned: dict) -> str:
 def pending(s: dict, owner: str, now: float | None = None) -> dict | None:
     """A joint rolled earlier by `kuf joint` that nobody has written yet."""
     now = time.time() if now is None else now
-    planned = s["plans"].get(owner)
+    planned = state.owned(s, owner, "plans")
     fresh = planned and planned.get("forced") and now - planned["ts"] < PLAN_TTL_S
     return planned if fresh else None
 
@@ -125,15 +125,16 @@ def busy(s: dict, now: float) -> bool:
 
 def force(owner: str, target: str | None = None) -> None:
     """`kuf joint [goblin]`: Snoop passes one on the next turn, no dice roll."""
-    state.update(lambda s: {**s, "force_joint": {**s["force_joint"],
-                                                 owner: {"target": target, "ts": time.time()}}})
+    state.update(lambda s: {**s, "force_joint": {
+        **s["force_joint"], owner: state.stamped(s, owner, {"target": target, "ts": time.time()})}})
 
 
 def with_plan(s: dict, owner: str, planned: dict | None) -> dict:
     """This turn's plan for `owner` (pure; see save_plan). A used-up forced joint is dropped."""
     plans = {o: p for o, p in s["plans"].items() if o != owner}
     forced = {o: f for o, f in s["force_joint"].items() if o != owner or not planned}
-    return {**s, "plans": {**plans, owner: planned} if planned else plans, "force_joint": forced}
+    plans = {**plans, owner: state.stamped(s, owner, planned)} if planned else plans
+    return {**s, "plans": plans, "force_joint": forced}
 
 
 def save_plan(owner: str, planned: dict | None) -> None:
@@ -204,7 +205,7 @@ def start(owner: str, steps: list[dict], now: float | None = None, vibe: str | N
     """Store a written session. Returns an error message, or None when it's on."""
     now = time.time() if now is None else now
     s = state.load()
-    planned = s["plans"].get(owner)
+    planned = state.owned(s, owner, "plans")
     if not planned or planned["kind"] not in KINDS or now - planned["ts"] > PLAN_TTL_S:
         return "no joint session or banter is planned for this turn; use kuf_react"
     names = [step["name"] for step in steps]
@@ -275,7 +276,7 @@ def _cut(s: dict, session: dict) -> bool:
 
 def _interrupted(s: dict, session: dict, owner: str, now: float) -> bool:
     """His own Claude just said something: show that for a bit, then back to the circle."""
-    mine = s["reactions"].get(owner)
+    mine = state.owned(s, owner, "reactions")
     since = session.get("anchor") or session["ts"]
     # (the host's own reaction stamped when the session was written doesn't count)
     return bool(mine) and mine["ts"] > max(since, session["ts"]) and now - mine["ts"] < INTERRUPT_S

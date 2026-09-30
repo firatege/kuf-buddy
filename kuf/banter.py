@@ -91,7 +91,7 @@ def exchange_cut(s: dict, jabber: str, reaction: dict) -> bool:
     a failure, a test run): the exchange is over on both screens at once."""
     target = owner_named(s, reaction.get("to", ""))
     ts = reaction.get("anchor") or reaction["ts"]      # the writing turn's own commands don't count
-    theirs = s["reactions"].get(target) if target else None
+    theirs = state.owned(s, target, "reactions") if target else None
     if theirs and theirs["ts"] > ts:
         return True
     return state.moved_on(s, {jabber, target}, ts)
