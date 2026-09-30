@@ -158,6 +158,9 @@ def call_tool(name: str, args: dict) -> dict:
     if to and not (reply and closing):
         missing = " and ".join(k for k, v in (("reply", reply), ("last_word", closing)) if not v)
         return _text(f"jabbing {to} needs a valid {missing} ({{emote, line}}); nothing was saved", True)
+    long = _too_long(line, *(x["line"] for x in (reply, closing) if x))
+    if long:
+        return _text(long, True)
     repeat = _repeat_of(line)
     if repeat:
         return _text(f'your goblin already said "{repeat}". write something new; nothing was saved', True)
@@ -188,6 +191,9 @@ def _session(raw, vibe=None, joke=None) -> dict:
         if emote not in EMOTES or not looks.can_use(who, emote):
             emote = None      # the session picks a fitting default
         steps.append({"name": who, "emote": emote, "line": line})
+    long = _too_long(*(step["line"] for step in steps))
+    if long:
+        return _text(long, True)
     error = session.start(owner_id(), steps, vibe=_vibe(vibe), joke=joke)
     return _text(error, True) if error else _text("ok, it's playing out")
 
@@ -204,8 +210,16 @@ def _repeat_of(line: str) -> str | None:
 
 
 def _clean(text) -> str:
-    line = " ".join(str(text or "").split())
-    return line if len(line) <= MAX_LINE else line[: MAX_LINE - 1] + "…"
+    return " ".join(str(text or "").split())
+
+
+def _too_long(*lines: str) -> str | None:
+    """An error for Claude to rewrite, instead of silently cutting a line mid-word."""
+    long = [line for line in lines if line and len(line) > MAX_LINE]
+    if not long:
+        return None
+    return (f"line too long ({len(long[0])} chars, max {MAX_LINE}): \"{long[0][:40]}…\". "
+            f"shorten it and send again; nothing was saved")
 
 
 def _spoken(value) -> dict | None:

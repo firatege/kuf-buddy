@@ -1492,3 +1492,12 @@ def test_the_nag_shows_in_that_terminal_in_his_voice(monkeypatch):
     assert breaks.view(state.load(), "term-a", name, t + breaks.SHOW_S + 1) is None
     assert all(e in EMOTES for e, _ in breaks.NAG.values())
     assert set(breaks.NAG) == set(buddies.VARIANTS)
+
+
+def test_too_long_lines_are_sent_back_not_cut():
+    state.register("term-a")
+    long_line = "it's all shipped, boss... the whole couch universe, one commit. i'd light one to celebrate but you're sick, so i'll smoke yours"
+    out = react(long_line)
+    assert out["isError"] and "too long" in out["content"][0]["text"]
+    assert "term-a" not in state.load()["reactions"]
+    assert not react("it's all shipped, boss. one commit. i'll smoke yours since you're sick")["isError"]
