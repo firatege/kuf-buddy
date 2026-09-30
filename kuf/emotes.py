@@ -184,6 +184,7 @@ IDLE_BY_MOOD = {
 }
 
 from . import looks  # noqa: E402
+from . import tr  # noqa: E402
 from .events import pick  # noqa: E402
 from .rooms import ROOMS  # noqa: E402  (rooms replace the couch versions of these emotes)
 
@@ -219,7 +220,7 @@ def for_line(template: str, kind: str | None, feeling: str, seed: str, name: str
     if kind in LIFE_EMOTES:
         return pick(LIFE_EMOTES[kind], seed)
     lowered = template.lower()
-    for words, emote in LINE_EMOTES:
+    for words, emote in LINE_EMOTES + tr.LINE_EMOTES:
         if any(w in lowered for w in words):
             return emote
     if feeling in ("grumpy", "furious"):

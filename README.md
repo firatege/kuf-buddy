@@ -100,6 +100,10 @@ The loops are sipping tea (the steam moves), napping stretched along the couch (
 
 When he talks to a neighbor (written replies and last words), he turns to face that terminal. A goblin whose neighbor is on the left is mirrored, and his bubble moves to his mouth side.
 
+### Türkçe
+
+`kuf config lang tr` switches the goblins to Turkish: every line Claude writes for them (solo lines, jabs, chats, joints) comes in Turkish street talk, and every canned line has a Turkish twin (the 50 couch lines, night mumbles, time-of-day and season lines, life lines, crowd, spotlight and break outbursts, "*dinliyor*"). The default "boss" becomes "patron". `kuf config lang en` switches back.
+
 ### Picking your goblin
 
 Every new terminal gets a free goblin. To choose one yourself:

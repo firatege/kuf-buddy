@@ -13,7 +13,8 @@ import random
 import time
 from typing import NamedTuple
 
-from . import looks, relations, state, stats
+from . import looks, relations, state, stats, tr
+from .config import turkish
 from .banter import ANCHOR_WAIT_S, NOTICE_S, numbered, owner_named, reading_s
 from .buddies import resolve
 
@@ -301,6 +302,13 @@ def _interrupted(s: dict, session: dict, owner: str, now: float) -> bool:
     return bool(mine) and mine["ts"] > max(since, session["ts"]) and now - mine["ts"] < INTERRUPT_S
 
 
+def _say(stage: str) -> str:
+    """Stage directions like *listening*, in the goblins' language."""
+    if not turkish():
+        return stage
+    return {WAITING: tr.WAITING, ROLLING: tr.ROLLING, "*listening*": tr.LISTENING}.get(stage, stage)
+
+
 def intro_s(session: dict) -> float:
     """Joints get rolled before anyone talks; plain banter starts right away."""
     return KINDS[session.get("kind", "session")].intro_s
@@ -332,8 +340,8 @@ def _view_one(s: dict, session: dict, owner: str, now: float) -> tuple[str, str,
         if owner == host:
             others = [st["owner"] for st in steps if st["owner"] != owner]
             rolling = "snoop-roll" if session.get("host_name", HOST) == HOST else "joint"
-            return rolling, ROLLING, others[0] if others else None, False
-        return "chill", WAITING, host, False
+            return rolling, _say(ROLLING), others[0] if others else None, False
+        return "chill", _say(WAITING), host, False
     current, clock = len(steps) - 1, 0.0
     for i, span in enumerate(spans):
         if elapsed < clock + span:
@@ -349,7 +357,7 @@ def _view_one(s: dict, session: dict, owner: str, now: float) -> tuple[str, str,
         # Face whoever gets it next (or anyone else in the circle).
         return holder["emote"], "\n".join(mine), others[0] if others else None, True
     waiting = KINDS[session.get("kind", "session")].waiting
-    return "chill", "\n".join(mine) if mine else waiting, holder["owner"], True
+    return "chill", "\n".join(mine) if mine else _say(waiting), holder["owner"], True
 
 
 

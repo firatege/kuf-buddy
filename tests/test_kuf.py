@@ -1596,3 +1596,48 @@ def test_a_session_starts_on_its_own_if_the_turn_never_ends():
     written = {"ts": 100.0, "steps": [], "kind": "banter"}
     assert session._start(written, 150.0) is None
     assert session._start(written, 100.0 + banter.ANCHOR_WAIT_S + 1) == 100.0
+
+
+# ── Turkish ────────────────────────────────────────────────────────────────────
+
+from kuf import tr  # noqa: E402
+
+
+def test_turkish_pools_mirror_the_english_ones():
+    import string
+    fields = {"user": "patron", "file": "x.py", "cmd": "pytest", "n": 3, "hour": "03", "name": "Kir"}
+    for kind, lines in tr.LINES.items():
+        assert len(lines) == len(events.LINES[kind]), kind
+        for line in lines:
+            assert "{" not in line.format(**fields)
+    assert set(tr.LIFE) == set(life.LIFE) and set(tr.CLOCK) == set(clock.POOLS)
+    for lines in tr.CLOCK.values():
+        assert all(e in EMOTES for e, _ in lines)
+    assert set(tr.CROWD) == set(buddies.VARIANTS) == set(tr.NAG)
+    assert all(e in EMOTES for kinds in tr.CROWD.values() for e, _ in kinds.values())
+    assert set(tr.SPOT) == set(tr.STAND_IN) == set(spotlight.STARS)
+    assert all(e in EMOTES for _, e in tr.LINE_EMOTES)
+
+
+def test_kuf_config_lang_tr_switches_everything(monkeypatch):
+    assert config.lang() == "en" and config.user_name() == "boss"
+    config.set_value("lang", "tr")
+    assert config.turkish() and config.user_name() == "patron"
+    assert events.canned("idle", None, 0, "1") in [l.format(user="patron") for l in tr.LINES["idle"]]
+    assert crowd.view({"moments": {"crowd": {"kind": "win", "ts": 100.0}}}, "Pas", 101.0) == tr.CROWD["Pas"]["win"]
+    assert breaks.NAG["Kir"][0] == breaks.view({"moments": {"nag": {"by": "a", "ts": 1.0}}}, "a", "Kir", 2.0)[0]
+    assert breaks.view({"moments": {"nag": {"by": "a", "ts": 1.0}}}, "a", "Kir", 2.0)[1] == tr.NAG["Kir"]
+    config.set_value("name", "ege")
+    assert config.user_name() == "ege"                         # a chosen name stays
+    config.set_value("lang", "klingon")
+    assert config.lang() == "en"                               # unknown languages fall back
+
+
+def test_turkish_mode_tells_claude_and_translates_stage_directions(monkeypatch):
+    config.set_value("lang", "tr")
+    state.register("term-a")
+    assert "Türkçe yaz" in banter.context_for_claude("term-a")
+    assert session._say("*listening*") == tr.LISTENING and session._say(session.ROLLING) == tr.ROLLING
+    assert emotes.for_line("*geğirir* ...testler bekleyebilir.", None, "comfy", "1") == "burp"
+    config.set_value("lang", "en")
+    assert "Türkçe" not in banter.context_for_claude("term-a")

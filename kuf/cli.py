@@ -344,7 +344,8 @@ USAGE = """usage: kuf <command>
                          start with one: KUF_GOBLIN=snoop claude
   joint [goblin]         Snoop passes one on your next message
   stats                  who smoked what, who talks to whom (also: goblin stats)
-  config name <name>     what the goblins call you (default: boss)
+  config name <name>     what the goblins call you (default: boss, "patron" in Turkish)
+  config lang tr|en      the goblins' language (default: en)
   config words_per_sec <n>  reading speed that paces written exchanges (default: 2)
   install-statusline     put Küf in ~/.claude/settings.json (backs it up first)
   uninstall-statusline"""

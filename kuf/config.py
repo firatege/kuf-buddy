@@ -26,5 +26,20 @@ def set_value(key: str, value: str) -> dict:
     return updated
 
 
+LANGS = ("en", "tr")
+
+
+def lang() -> str:
+    """Which language the goblins speak: `kuf config lang tr` for Turkish."""
+    chosen = str(load().get("lang", "en")).lower()
+    return chosen if chosen in LANGS else "en"
+
+
+def turkish() -> bool:
+    return lang() == "tr"
+
+
 def user_name() -> str:
-    return load()["name"]
+    """What the goblins call you; the default "boss" becomes "patron" in Turkish."""
+    name = load()["name"]
+    return "patron" if name == DEFAULTS["name"] and turkish() else name

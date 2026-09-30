@@ -4,6 +4,9 @@ is blankets and summer is sweat."""
 
 from datetime import datetime
 
+from . import tr
+from .config import turkish
+
 MOOD_PCT = 30          # share of idle lines that come from the moment's pool, when there is one
 
 # pool -> (emote, line template); {user} is filled in
@@ -88,10 +91,11 @@ def pools(m: dict) -> list[str]:
 
 def candidates(m: dict, user: str) -> list[tuple[str, str]]:
     """(template, line) for every pooled line that fits right now."""
-    return [(t, t.format(user=user)) for pool in pools(m) for _, t in POOLS[pool]]
+    table = tr.CLOCK if turkish() else POOLS
+    return [(t, t.format(user=user)) for pool in pools(m) for _, t in table[pool]]
 
 
-EMOTE_OF = {t: e for lines in POOLS.values() for e, t in lines}
+EMOTE_OF = {t: e for table in (POOLS, tr.CLOCK) for lines in table.values() for e, t in lines}
 
 
 def describe(m: dict) -> str:

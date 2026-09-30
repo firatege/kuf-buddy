@@ -8,7 +8,8 @@ from datetime import datetime
 from pathlib import Path
 
 from .clock import is_night
-from .config import user_name
+from . import tr
+from .config import turkish, user_name
 
 GRUMPY_WINDOW_S = 180
 FURIOUS_WINDOW_S = 420
@@ -167,11 +168,16 @@ def _fields(event: dict | None, n: int) -> dict:
 def candidates(kind: str, event: dict | None, n: int, **extra: str) -> list[tuple[str, str]]:
     """Every (template, filled line) of one kind."""
     fields = {**_fields(event, n), **extra}
-    return [(t, t.format(**fields)) for t in LINES[kind]]
+    return [(t, t.format(**fields)) for t in lines(kind)]
+
+
+def lines(kind: str) -> list[str]:
+    """This kind's canned lines in the goblins' language."""
+    return (tr.LINES if turkish() else LINES)[kind]
 
 
 def canned(kind: str, event: dict | None, n: int, seed: str, **extra: str) -> str:
-    return pick(LINES[kind], seed).format(**{**_fields(event, n), **extra})
+    return pick(lines(kind), seed).format(**{**_fields(event, n), **extra})
 
 
 def edit_count(events: list[dict]) -> int:

@@ -1,6 +1,8 @@
 """Canned solo lines about what the user is up to right now (song, discord, tabs,
 apps). One idle line in ten comes from here when there's something to talk about."""
 
+from . import tr
+from .config import turkish
 from .events import chance
 
 LIFE_PCT = 10          # share of idle lines about the user's life; the rest use the plain pool
@@ -79,7 +81,8 @@ def wants_life(seed: str) -> bool:
 
 def candidates(facts: dict, user: str) -> list[tuple[str, str]]:
     """Every (template, filled line) about what the user is up to right now."""
-    return [(t, t.format(user=user, **fields)) for kind, fields in topics(facts) for t in LIFE[kind]]
+    pools = tr.LIFE if turkish() else LIFE
+    return [(t, t.format(user=user, **fields)) for kind, fields in topics(facts) for t in pools[kind]]
 
 
-KIND_OF = {t: kind for kind, lines in LIFE.items() for t in lines}
+KIND_OF = {t: kind for pools in (LIFE, tr.LIFE) for kind, lines in pools.items() for t in lines}

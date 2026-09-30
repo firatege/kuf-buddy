@@ -5,7 +5,8 @@ cops). If that goblin isn't open, the goblin of the terminal where it happened r
 import re
 from datetime import datetime
 
-from . import clock, moments, state, stats
+from . import clock, moments, state, stats, tr
+from .config import turkish
 
 SPOTLIGHT_S = 10.0
 COOLDOWN_S = 60.0      # per kind of event
@@ -68,7 +69,8 @@ def view(s: dict, owner: str, name: str, now: float) -> tuple[str, str] | None:
         return None
     star, emote, line = STARS[spot["kind"]]
     if name == star:
-        return emote, line
+        return emote, tr.SPOT[spot["kind"]] if turkish() else line
     if star not in state.live_names(s) and owner == spot["by"]:
-        return STAND_IN[spot["kind"]]
+        stand_emote, stand_line = STAND_IN[spot["kind"]]
+        return stand_emote, tr.STAND_IN[spot["kind"]] if turkish() else stand_line
     return None

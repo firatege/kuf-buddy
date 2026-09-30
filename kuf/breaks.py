@@ -3,7 +3,8 @@ user to get up, drink water, look at something far away. Once every 45 minutes a
 
 import time
 
-from . import moments, state
+from . import moments, state, tr
+from .config import turkish
 
 GAP_S = 15 * 60        # a pause this long counts as a break and resets the streak
 STREAK_S = 2 * 3600    # nonstop work before a reminder
@@ -59,7 +60,8 @@ def view(s: dict, owner: str, name: str, now: float) -> tuple[str, str] | None:
     nag = moments.current(s, "nag", SHOW_S, now)
     if not nag or nag["by"] != owner:
         return None
-    return NAG.get(name, FALLBACK)
+    emote, line = NAG.get(name, FALLBACK)
+    return emote, (tr.NAG.get(name, tr.NAG_FALLBACK) if turkish() else line)
 
 
 def note(s: dict, now: float) -> str:

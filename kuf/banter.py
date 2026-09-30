@@ -5,7 +5,7 @@ import time
 
 from . import clock, facts, looks, relations, state
 from .buddies import VARIANTS
-from .config import load as load_config, user_name
+from .config import load as load_config, turkish, user_name
 from .screen import describe_neighbors
 
 WORDS_PER_S = 2.0      # relaxed reading speed; `kuf config words_per_sec <n>`
@@ -114,6 +114,9 @@ def context_for_claude(owner: str) -> str:
     lines = [f"[kuf-buddy] You voice {name} ('{me['meaning']}'): {me['trait']}. "
              f"Talk to the user ({user_name()}); neighbors only when told BANTER or JOINT.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
     lines.append(f"Now: {clock.describe(clock.moment())} (let it color the mood, don't announce it).")
+    if turkish():
+        lines.append("DİL: goblin satırlarının hepsini (kuf_react line/reply/last_word, kuf_session "
+                     "adımları, joke) Türkçe yaz: sokak ağzı, küfürlü, küçük harf, kısa. Emote adları aynı kalır.")
     own = looks.signatures(name)
     if own:
         lines.append(f"Your own emotes: {', '.join(own)}.")

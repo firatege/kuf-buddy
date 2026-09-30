@@ -1,7 +1,8 @@
 """Crowd moments: when tests pass (or blow up) in any terminal, every goblin reacts at
 once, each in his own way. Solo outbursts, not a conversation, so they're canned."""
 
-from . import moments
+from . import moments, tr
+from .config import turkish
 
 CROWD_S = 12.0         # how long everyone reacts
 COOLDOWN_S = 120.0     # at most one crowd moment every two minutes
@@ -33,4 +34,5 @@ def view(s: dict, name: str, now: float) -> tuple[str, str] | None:
     crowd = moments.current(s, "crowd", CROWD_S, now)
     if not crowd:
         return None
-    return REACTIONS.get(name, {}).get(crowd["kind"], FALLBACK[crowd["kind"]])
+    table, fallback = (tr.CROWD, tr.CROWD_FALLBACK) if turkish() else (REACTIONS, FALLBACK)
+    return table.get(name, {}).get(crowd["kind"], fallback[crowd["kind"]])
