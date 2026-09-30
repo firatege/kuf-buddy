@@ -1641,3 +1641,9 @@ def test_turkish_mode_tells_claude_and_translates_stage_directions(monkeypatch):
     assert emotes.for_line("*geğirir* ...testler bekleyebilir.", None, "comfy", "1") == "burp"
     config.set_value("lang", "en")
     assert "Türkçe" not in banter.context_for_claude("term-a")
+
+
+def test_joint_notes_keep_the_dice_backstage():
+    for kind in ("session", "refused"):
+        planned = {"kind": kind, "order": ["Snoop", "Kir"], "target": "Kir", "why": "", "host_name": "Snoop"}
+        assert "never mention rolls, dice" in session.note(planned)
