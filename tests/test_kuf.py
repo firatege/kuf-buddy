@@ -1647,3 +1647,11 @@ def test_joint_notes_keep_the_dice_backstage():
     for kind in ("session", "refused"):
         planned = {"kind": kind, "order": ["Snoop", "Kir"], "target": "Kir", "why": "", "host_name": "Snoop"}
         assert "never mention rolls, dice" in session.note(planned)
+
+
+def test_turkish_lines_never_glue_a_suffix_onto_a_placeholder():
+    """'{file}'a' reads wrong for most names ('main.py'a'): build sentences that need no suffix."""
+    import re
+    texts = [l for v in tr.LINES.values() for l in v] + [l for v in tr.LIFE.values() for l in v] + \
+            [l for v in tr.CLOCK.values() for _, l in v]
+    assert not [t for t in texts if re.search(r"\}'|\}:00'", t)]
