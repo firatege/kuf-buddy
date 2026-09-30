@@ -2,7 +2,7 @@
 
 from ._kit import scene
 
-SMOKE = {"░": "s", "▒": "s", "▓": "s", "~": "s", "*": "e", "✸": "e", "═": " "}
+SMOKE = {"░": "s", "▒": "s", "▓": "s", "~": "s", "*": "e", "✸": "e", "═": "g"}   # joint paper is green
 COUCH = "▐█▄▄▄▄▄▄▄█▌"
 
 EMOTES = {

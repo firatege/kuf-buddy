@@ -14,10 +14,10 @@ ROOMS: dict[str, dict] = {
             [' ░  ▒ ░   ·     ', '   (-‿-)y═·     ', '    /|▓▓▓| ahh  ', ' ╫══╫══╫══╫══╫  '],
         ],
         "masks": [
-            ['          s     ', '   ...... e     ', '    ......      ', ' wwwwwwwwwwwww  '],
-            ['        s s     ', '   ...... e     ', '    ......      ', ' wwwwwwwwwwwww  '],
-            ['  sssss  s      ', '   ...... e     ', '    ......      ', ' wwwwwwwwwwwww  '],
-            [' s  s s   s     ', '   ...... e     ', '    ......      ', ' wwwwwwwwwwwww  '],
+            ['          s     ', '   ......ge     ', '    ......      ', ' wwwwwwwwwwwww  '],
+            ['        s s     ', '   ......ge     ', '    ......      ', ' wwwwwwwwwwwww  '],
+            ['  sssss  s      ', '   ......ge     ', '    ......      ', ' wwwwwwwwwwwww  '],
+            [' s  s s   s     ', '   ......ge     ', '    ......      ', ' wwwwwwwwwwwww  '],
         ],
     },
     "trip": {

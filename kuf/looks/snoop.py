@@ -7,7 +7,7 @@ HABITS = ['smoke', 'smoke', 'trip', 'chill', 'eat']             # shared emotes 
 ACCEPTS_JOINT = 1.0           # chance he takes the joint when Snoop passes it
 REFUSAL = ''
 
-SMOKE = {"░": "s", "▒": "s", "▓": "s", "~": "s", "*": "e", "✸": "e", "═": " "}
+SMOKE = {"░": "s", "▒": "s", "▓": "s", "~": "s", "*": "e", "✸": "e", "═": "g"}   # joint paper is green
 TEXT = {c: "y" for c in "abcdefghijklmnopqrstuvwxyz.!"}
 COUCH = "▐█▄▄▄▄▄▄▄█▌"
 
@@ -67,7 +67,7 @@ EMOTES: dict[str, dict] = {
          "  /|▓▓▓|        ",
          " ▔▔▔▔▔▔▔▔▔▔▔▔▔  "],
     ], {**{k: v for k, v in SMOKE.items() if k != "═"}, **{c: "y" for c in "crumblelicksmoth."},
-        ",": "g", "[": "w", "]": "w", "▔": "w", "═": "y"}),
+        ",": "g", "[": "w", "]": "w", "▔": "w", "═": "g"}),
     "snoop-lowrider": scene("cruising low, hydraulics bouncing the whip", [
         ["     ♪          ",
          "   (-‿-)ﾉ       ",
