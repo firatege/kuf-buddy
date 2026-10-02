@@ -97,6 +97,11 @@ def recall(s: dict, name: str, now: float) -> str:
     return "Your recent lines (call back to them, never repeat one):\n" + "\n".join(lines)
 
 
+# the user may write to Claude in any language; without this the goblins follow it
+ENGLISH = ("LANGUAGE: goblin lines (kuf_react line/reply/last_word, kuf_session steps, joke) are "
+           "in English, even when the user writes in another language or earlier lines weren't.")
+
+
 def _jab_at(s: dict, host: str, name: str, now: float) -> dict | None:
     """A jab `host` threw at `name` recently, if any."""
     jab = s.get("sessions", {}).get(host)
@@ -114,8 +119,7 @@ def context_for_claude(owner: str) -> str:
     lines = [f"[kuf-buddy] You voice {name} ('{me['meaning']}'): {me['trait']}. "
              f"Talk to the user ({user_name()}); neighbors only when told BANTER or JOINT.", topic_note(facts.describe(facts.cached(state.state_dir() / "facts.json")))]
     lines.append(f"Now: {clock.describe(clock.moment())} (let it color the mood, don't announce it).")
-    if turkish():
-        lines.append(tr.STYLE)
+    lines.append(tr.STYLE if turkish() else ENGLISH)
     own = looks.signatures(name)
     if own:
         lines.append(f"Your own emotes: {', '.join(own)}.")

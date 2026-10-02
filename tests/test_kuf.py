@@ -1640,7 +1640,8 @@ def test_turkish_mode_tells_claude_and_translates_stage_directions(monkeypatch):
     assert session._say("*listening*") == tr.LISTENING and session._say(session.ROLLING) == tr.ROLLING
     assert emotes.for_line("*geğirir* ...testler bekleyebilir.", None, "comfy", "1") == "burp"
     config.set_value("lang", "en")
-    assert "Türkçe" not in banter.context_for_claude("term-a")
+    note = banter.context_for_claude("term-a")
+    assert "Türkçe" not in note and banter.ENGLISH in note       # the user's language doesn't leak in
 
 
 def test_joint_notes_keep_the_dice_backstage():
